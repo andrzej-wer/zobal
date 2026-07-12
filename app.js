@@ -11,6 +11,8 @@ function el(id){return document.getElementById(id)}
 function money(v){return new Intl.NumberFormat('pl-PL',{style:'currency',currency:'PLN'}).format(Number(v||0))}
 function fmtDate(v){return v?new Date(v).toLocaleDateString('pl-PL'):'—'}
 function statusLabel(s){return ({new:'Nowe',pricing:'W trakcie wyceny',ready:'Gotowe',sent:'Wysłane',revision:'Do poprawy',accepted:'Zaakceptowane',rejected:'Odrzucone',ordered:'Zamówione',completed:'Zrealizowane'})[s]||s}
+function normalizeSource(s){return ({web_form:'www',website:'www',www:'www',email:'email',manual:'manual'})[s]||'manual'}
+function sourceLabel(s){return ({www:'Strona WWW',email:'E-mail',manual:'Ręcznie'})[normalizeSource(s)]}
 function showMsg(text,type='notice'){const x=el('msg');if(!x)return;x.className=type;x.textContent=text;x.style.display='block'}
 async function requireAuth(){if(!configured){showMsg('Uzupełnij plik supabase-config.js danymi projektu Supabase.','notice');return null}const {data:{session}}=await sb.auth.getSession();if(!session){location.href='index.html';return null}return session}
 async function signOut(){if(sb)await sb.auth.signOut();location.href='index.html'}
@@ -36,9 +38,9 @@ function renderKpis(rows){
   el('kpi-sent').textContent=rows.filter(x=>x.status==='sent').length;
 }
 function renderQuotes(rows){
-  el('quotes-body').innerHTML=rows.map(r=>`<tr><td><a href="quote.html?id=${r.id}"><strong>${r.request_number||'—'}</strong></a></td><td>${r.customer_name||'—'}<br><span class="muted">${r.company_name||''}</span></td><td>${r.zobal_numbers||'—'}</td><td>${fmtDate(r.created_at)}</td><td>${r.gross_total?money(r.gross_total):'—'}</td><td><span class="badge ${r.status}">${statusLabel(r.status)}</span></td></tr>`).join('')||'<tr><td colspan="6" class="muted">Brak wycen.</td></tr>';
+  el('quotes-body').innerHTML=rows.map(r=>`<tr><td><a href="quote.html?id=${r.id}"><strong>${r.request_number||'—'}</strong></a></td><td>${r.customer_name||'—'}<br><span class="muted">${r.company_name||''}</span></td><td><span class="source-badge source-${normalizeSource(r.source)}">${sourceLabel(r.source)}</span></td><td>${r.zobal_numbers||'—'}</td><td>${fmtDate(r.created_at)}</td><td>${r.gross_total?money(r.gross_total):'—'}</td><td><span class="badge ${r.status}">${statusLabel(r.status)}</span></td></tr>`).join('')||'<tr><td colspan="7" class="muted">Brak wycen.</td></tr>';
 }
-function filterQuotes(){const q=el('search').value.toLowerCase();const s=el('status-filter').value;renderQuotes((window.allQuotes||[]).filter(r=>(!s||r.status===s)&&JSON.stringify(r).toLowerCase().includes(q)))}
+function filterQuotes(){const q=el('search').value.toLowerCase(),s=el('status-filter').value,src=el('source-filter')?.value||'';renderQuotes((window.allQuotes||[]).filter(r=>(!s||r.status===s)&&(!src||normalizeSource(r.source)===src)&&JSON.stringify(r).toLowerCase().includes(q)))}
 
 async function loadQuote(){
   const session=await requireAuth(); if(!session||!configured)return;
@@ -100,8 +102,8 @@ function renderItemDetails(i){
 }
 function renderQuote(){
   const r=window.quoteRequest,c=r.customers||{};
-  el('title').textContent=r.request_number||'Zapytanie'; el('status').value=r.status;
-  el('customer').innerHTML=`<strong>${escHtml(c.name||'—')}</strong>${c.company_name?'<br>'+escHtml(c.company_name):''}<br>${escHtml(c.email||'—')}<br>${escHtml(c.phone||'—')}<br>${escHtml([c.address,c.zip,c.city].filter(Boolean).join(', '))}`;
+  el('title').textContent=r.request_number||'Zapytanie'; el('status').value=r.status; if(el('source'))el('source').value=normalizeSource(r.source);
+  el('customer').innerHTML=`<div style="margin-bottom:10px"><span class="source-badge source-${normalizeSource(r.source)}">${sourceLabel(r.source)}</span></div><strong>${escHtml(c.name||'—')}</strong>${c.company_name?'<br>'+escHtml(c.company_name):''}<br>${escHtml(c.email||'—')}<br>${escHtml(c.phone||'—')}<br>${escHtml([c.address,c.zip,c.city].filter(Boolean).join(', '))}`;
   el('notes').value=r.internal_notes||'';
   const generalDelivery=el('client-delivery-time')?.value||'';
   el('items-body').innerHTML=window.quoteItems.map(i=>{
@@ -136,7 +138,7 @@ async function saveQuote(){
     const p=itemPricingFromRow(i.id),delivery=document.querySelector(`.item-delivery-input[data-item="${i.id}"]`)?.value.trim()||null;
     return sb.from('quote_items').update({purchase_unit_net:p.purchase,margin_percent:p.margin,sale_unit_net:p.net,delivery_time:delivery}).eq('id',i.id);
   });
-  updates.push(sb.from('quote_requests').update({status:el('status').value,internal_notes:el('notes').value,updated_at:new Date().toISOString()}).eq('id',window.requestId));
+  updates.push(sb.from('quote_requests').update({source:el('source')?.value||'manual',status:el('status').value,internal_notes:el('notes').value,updated_at:new Date().toISOString()}).eq('id',window.requestId));
   const results=await Promise.all(updates); const err=results.find(x=>x.error)?.error;
   if(err){showMsg(err.message,'error');return}showMsg('Zapisano zmiany.','success');await loadQuote();
 }
