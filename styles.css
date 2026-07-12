@@ -11,3 +11,16 @@
 
 /* Źródło zapytania */
 .source-badge{display:inline-block;padding:5px 9px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}.source-www{background:#e8f1ff;color:#235b9f}.source-email{background:#f1eaff;color:#6b3ab0}.source-manual{background:#eef1f4;color:#465565}
+
+/* Czytelniejszy widok pozycji i kompaktowe pola */
+.item-title{font-size:15px;font-weight:800;color:var(--navy2);line-height:1.35;margin-bottom:9px}
+.item-specs{list-style:none;padding:0;margin:0;display:grid;gap:7px;font-size:12.5px;line-height:1.45}
+.item-specs li{display:grid;grid-template-columns:145px minmax(0,1fr);gap:10px;align-items:start}
+.item-specs li>span{color:var(--muted);font-weight:700}
+.item-specs li>strong{font-weight:500;color:var(--text)}
+.item-files{display:flex;gap:6px;flex-wrap:wrap}.btn-file{padding:4px 8px;font-size:11px}
+.purchase-cell{min-width:104px;width:104px}.margin-cell{min-width:82px;width:82px}.purchase-input{min-width:82px;padding:9px 8px}.margin-input{min-width:58px;padding:9px 8px}
+.delivery-cell{min-width:130px;width:130px}.item-delivery-input{min-width:110px;padding:9px 8px}
+.client-gross-value,.line-gross-value{min-width:108px}
+.customer-edit-grid{display:grid;grid-template-columns:1fr;gap:10px}.customer-edit-grid input{padding:9px 10px}
+@media(max-width:900px){.item-specs li{grid-template-columns:1fr;gap:2px}}

@@ -67,49 +67,74 @@ function formatPositions(data){
   const vals=positions.map(p=>`${p.number} = ${p.mm_from_bottom} mm`).join(', ');
   return vals?`${mode}: ${vals}`:mode;
 }
+function normalizeDeliveryTime(value){
+  const raw=String(value||'').trim();
+  if(!raw)return '—';
+  if(/tyg/i.test(raw))return raw;
+  if(/^\d+(?:\s*[-–]\s*\d+)?$/.test(raw))return `${raw.replace('-', '–')} tygodni`;
+  return raw;
+}
 function renderItemDetails(i){
   const hinges=i.hinges_type||'Brak';
-  const hingeInfo=hinges==='Brak'
-    ? 'Brak'
-    : [
-        hinges,
-        i.hinge_side?`strona: ${i.hinge_side}`:null,
-        i.hinge_brand?`marka: ${i.hinge_brand}`:null,
-        i.hinge_quantity?`ilość: ${i.hinge_quantity}`:null,
-        `położenie: ${formatPositions(i.hinge_positions)}`
-      ].filter(Boolean).join(' · ');
+  const hingeParts=[];
+  if(hinges!=='Brak'){
+    hingeParts.push(hinges);
+    if(i.hinge_side)hingeParts.push(`strona: ${i.hinge_side}`);
+    if(i.hinge_brand)hingeParts.push(`marka: ${i.hinge_brand}`);
+    if(i.hinge_quantity)hingeParts.push(`ilość: ${i.hinge_quantity}`);
+    hingeParts.push(`położenie: ${formatPositions(i.hinge_positions)}`);
+  }
   const stiffener=i.stiffener_type||'Brak';
-  const stiffenerInfo=stiffener==='Brak'
-    ? 'Brak'
-    : [
-        stiffener,
-        i.stiffener_quantity?`ilość: ${i.stiffener_quantity}`:null,
-        `położenie: ${formatPositions(i.stiffener_positions)}`
-      ].filter(Boolean).join(' · ');
+  const stiffenerParts=[];
+  if(stiffener!=='Brak'){
+    stiffenerParts.push(stiffener);
+    if(i.stiffener_quantity)stiffenerParts.push(`ilość: ${i.stiffener_quantity}`);
+    stiffenerParts.push(`położenie: ${formatPositions(i.stiffener_positions)}`);
+  }
   const files=(window.requestAttachments||[]).filter(a=>Number(a.item_position)===Number(i.position));
-  const filesHtml=files.length
-    ? `<div style="margin-top:8px"><strong>Załączniki klienta:</strong> ${files.map(a=>`<button type="button" class="btn btn-light" style="padding:4px 8px;margin:3px 4px 0 0" onclick="openPrivateFile('request-attachments','${escHtml(a.storage_path)}')">📎 ${escHtml(a.original_name)}</button>`).join('')}</div>`
-    : '';
-  return `
-    <div><strong>${escHtml(i.item_name||`Front ${i.position}`)}</strong></div>
-    <div class="muted" style="margin-top:4px">${escHtml(i.profile_code||'—')} / ${escHtml(i.finish||'—')} / ${escHtml(i.filling||'—')}</div>
-    <div style="margin-top:8px;font-size:13px;line-height:1.5">
-      ${detailLine('Zawiasy / otwory',hingeInfo)}
-      ${detailLine('Szpros / usztywnienie',stiffenerInfo)}
-      ${detailLine('Uwagi klienta',i.customer_notes)}
+  const filesHtml=files.length?`<li><span>Załączniki</span><div class="item-files">${files.map(a=>`<button type="button" class="btn btn-light btn-file" onclick="openPrivateFile('request-attachments','${escHtml(a.storage_path)}')">📎 ${escHtml(a.original_name)}</button>`).join('')}</div></li>`:'';
+  const title=[i.item_name||`Front ${i.position}`,i.profile_code,i.finish,i.filling].filter(Boolean).join(' · ');
+  return `<div class="item-title">${escHtml(title)}</div>
+    <ul class="item-specs">
+      <li><span>Wymiary</span><strong>${escHtml(i.height_mm||'—')} × ${escHtml(i.width_mm||'—')} mm</strong></li>
+      <li><span>Zawiasy / otwory</span><strong>${escHtml(hinges==='Brak'?'Brak':hingeParts.join(' · '))}</strong></li>
+      <li><span>Szpros / usztywnienie</span><strong>${escHtml(stiffener==='Brak'?'Brak':stiffenerParts.join(' · '))}</strong></li>
+      ${i.customer_notes?`<li><span>Uwagi</span><strong>${escHtml(i.customer_notes)}</strong></li>`:''}
       ${filesHtml}
-    </div>`;
+    </ul>`;
+}
+function renderCustomerEditor(c,r){
+  return `<div style="margin-bottom:12px"><span class="source-badge source-${normalizeSource(r.source)}">${sourceLabel(r.source)}</span></div>
+  <div class="customer-edit-grid">
+    <div><label>Imię i nazwisko</label><input id="cust-name" value="${escHtml(c.name||'')}"></div>
+    <div><label>Firma</label><input id="cust-company" value="${escHtml(c.company_name||'')}"></div>
+    <div><label>E-mail</label><input id="cust-email" type="email" value="${escHtml(c.email||'')}"></div>
+    <div><label>Telefon</label><input id="cust-phone" value="${escHtml(c.phone||'')}"></div>
+    <div><label>NIP</label><input id="cust-nip" value="${escHtml(c.nip||'')}"></div>
+    <div><label>Adres</label><input id="cust-address" value="${escHtml(c.address||'')}"></div>
+    <div><label>Kod pocztowy</label><input id="cust-zip" value="${escHtml(c.zip||'')}"></div>
+    <div><label>Miejscowość</label><input id="cust-city" value="${escHtml(c.city||'')}"></div>
+  </div>
+  <button class="btn btn-primary" style="margin-top:12px;width:100%" onclick="saveCustomer()">Zapisz dane klienta</button>`;
+}
+async function saveCustomer(){
+  const c=window.quoteRequest?.customers;if(!c?.id){showMsg('Brak identyfikatora klienta.','error');return}
+  const data={name:el('cust-name').value.trim(),company_name:el('cust-company').value.trim()||null,email:el('cust-email').value.trim()||null,phone:el('cust-phone').value.trim()||null,nip:el('cust-nip').value.trim()||null,address:el('cust-address').value.trim()||null,zip:el('cust-zip').value.trim()||null,city:el('cust-city').value.trim()||null,updated_at:new Date().toISOString()};
+  if(!data.name){showMsg('Podaj imię i nazwisko klienta.','error');return}
+  const {error}=await sb.from('customers').update(data).eq('id',c.id);
+  if(error){showMsg(error.message,'error');return}
+  showMsg('Zapisano dane klienta.','success');await loadQuote();
 }
 function renderQuote(){
   const r=window.quoteRequest,c=r.customers||{};
   el('title').textContent=r.request_number||'Zapytanie'; el('status').value=r.status; if(el('source'))el('source').value=normalizeSource(r.source);
-  el('customer').innerHTML=`<div style="margin-bottom:10px"><span class="source-badge source-${normalizeSource(r.source)}">${sourceLabel(r.source)}</span></div><strong>${escHtml(c.name||'—')}</strong>${c.company_name?'<br>'+escHtml(c.company_name):''}<br>${escHtml(c.email||'—')}<br>${escHtml(c.phone||'—')}<br>${escHtml([c.address,c.zip,c.city].filter(Boolean).join(', '))}`;
+  el('customer').innerHTML=renderCustomerEditor(c,r);
   el('notes').value=r.internal_notes||'';
   const generalDelivery=el('client-delivery-time')?.value||'';
   el('items-body').innerHTML=window.quoteItems.map(i=>{
-    const purchase=Number(i.purchase_unit_net||0),margin=Number(i.margin_percent||0),sale=purchase*(1+margin/100),gross=sale*1.23,lineGross=gross*Number(i.quantity||0);
+    const purchase=Number(i.purchase_unit_net||0),margin=(i.margin_percent===null||i.margin_percent===undefined||Number(i.margin_percent)===0)?40:Number(i.margin_percent),sale=purchase*(1+margin/100),gross=sale*1.23,lineGross=gross*Number(i.quantity||0);
     const delivery=i.delivery_time||generalDelivery;
-    return `<tr data-item-row="${i.id}"><td>${i.position}</td><td class="item-description">${renderItemDetails(i)}</td><td>${i.height_mm||'—'} × ${i.width_mm||'—'}</td><td>${i.quantity}</td><td class="purchase-cell"><input type="number" step="0.01" min="0" value="${purchase||''}" data-item="${i.id}" class="purchase-input"></td><td class="margin-cell"><input type="number" step="0.01" min="0" value="${margin||''}" data-item="${i.id}" class="margin-input"></td><td class="client-net-value">${money(sale)}</td><td class="client-gross-value">${money(gross)}</td><td class="line-gross-value">${money(lineGross)}</td><td class="delivery-cell"><input type="text" value="${escHtml(delivery)}" data-item="${i.id}" data-custom="${i.delivery_time?'1':'0'}" class="item-delivery-input" placeholder="np. 15 dni roboczych"></td><td class="item-actions"><button class="btn btn-light btn-small" onclick="openItemEditor('${i.id}')">Edytuj</button><button class="btn btn-danger btn-small" onclick="deleteQuoteItem('${i.id}')">Usuń</button></td></tr>`;
+    return `<tr data-item-row="${i.id}"><td>${i.position}</td><td class="item-description">${renderItemDetails(i)}</td><td>${i.quantity}</td><td class="purchase-cell"><input type="number" step="0.01" min="0" value="${purchase||''}" data-item="${i.id}" class="purchase-input"></td><td class="margin-cell"><input type="number" step="0.01" min="0" value="${margin}" data-item="${i.id}" class="margin-input"></td><td class="client-gross-value">${money(gross)}</td><td class="line-gross-value">${money(lineGross)}</td><td class="delivery-cell"><input type="text" value="${escHtml(delivery)}" data-item="${i.id}" data-custom="${i.delivery_time?'1':'0'}" class="item-delivery-input" placeholder="np. 4–8 tygodni"></td><td class="item-actions"><button class="btn btn-light btn-small" onclick="openItemEditor('${i.id}')">Edytuj</button><button class="btn btn-danger btn-small" onclick="deleteQuoteItem('${i.id}')">Usuń</button></td></tr>`;
   }).join('');
   el('zobal-list').innerHTML=window.zobals.map(z=>`<div class="doc-row internal"><div><strong>${escHtml(z.zobal_number)}</strong><br><span class="muted">${fmtDate(z.calculation_date||z.created_at)} · ${z.purchase_net?money(z.purchase_net)+' netto':'bez kwoty'}</span></div><div>${z.document_path?`<button class="btn btn-light" onclick="openPrivateFile('zobal-internal','${z.document_path}')">Otwórz PDF</button>`:''}</div></div>`).join('')||'<p class="muted">Brak kalkulacji Zobal.</p>';
   el('client-docs').innerHTML=window.clientQuotes.map(q=>`<div class="doc-row client"><div><strong>${escHtml(q.quote_number)}/V${q.version}</strong><br><span class="muted">${money(q.gross_total)} brutto · ${escHtml(q.status)}</span></div><div>${q.client_pdf_path?`<button class="btn btn-light" onclick="openPrivateFile('client-documents','${q.client_pdf_path}')">Otwórz PDF</button>`:''}</div></div>`).join('')||'<p class="muted">Brak dokumentów dla klienta.</p>';
@@ -117,19 +142,18 @@ function renderQuote(){
   updateQuoteSummary();
   document.querySelectorAll('.purchase-input,.margin-input').forEach(x=>x.addEventListener('input',()=>{recalculateItemRow(x.dataset.item);updateQuoteSummary()}));
   document.querySelectorAll('.item-delivery-input').forEach(x=>x.addEventListener('input',()=>{x.dataset.custom='1'}));
-  ['client-delivery-net','client-discount-net'].forEach(id=>el(id)?.addEventListener('input',updateQuoteSummary));
+  el('client-delivery-net')?.addEventListener('input',updateQuoteSummary);
   el('client-delivery-time')?.addEventListener('input',()=>{document.querySelectorAll('.item-delivery-input[data-custom="0"]').forEach(x=>x.value=el('client-delivery-time').value)});
 }
 function itemPricingFromRow(itemId){
   const row=document.querySelector(`tr[data-item-row="${itemId}"]`);
-  const purchase=Number(row?.querySelector('.purchase-input')?.value||0),margin=Number(row?.querySelector('.margin-input')?.value||0);
+  const purchase=Number(row?.querySelector('.purchase-input')?.value||0),margin=Number(row?.querySelector('.margin-input')?.value||40);
   const net=purchase*(1+margin/100),gross=net*1.23;
   return {purchase,margin,net,gross};
 }
 function recalculateItemRow(itemId){
   const row=document.querySelector(`tr[data-item-row="${itemId}"]`),item=(window.quoteItems||[]).find(i=>i.id===itemId);if(!row||!item)return;
   const p=itemPricingFromRow(itemId);
-  row.querySelector('.client-net-value').textContent=money(p.net);
   row.querySelector('.client-gross-value').textContent=money(p.gross);
   row.querySelector('.line-gross-value').textContent=money(p.gross*Number(item.quantity||0));
 }
@@ -249,13 +273,13 @@ function currentQuoteTotals(){
   const items=window.quoteItems||[];
   let itemsNet=0;
   items.forEach(i=>{itemsNet+=itemPricingFromRow(i.id).net*Number(i.quantity||0)});
-  const delivery=Number(el('client-delivery-net')?.value||0),discount=Number(el('client-discount-net')?.value||0),vatRate=23;
-  const net=Math.max(0,itemsNet+delivery-discount),vat=Math.round(net*vatRate)/100,gross=net+vat;
-  return {itemsNet,delivery,discount,vatRate,net,vat,gross};
+  const delivery=Number(el('client-delivery-net')?.value||0),vatRate=23;
+  const net=Math.max(0,itemsNet+delivery),vat=Math.round(net*vatRate)/100,gross=net+vat;
+  return {itemsNet,delivery,vatRate,net,vat,gross};
 }
 function updateQuoteSummary(){
   const t=currentQuoteTotals(),box=el('quote-summary');if(!box)return;
-  box.innerHTML=`<div><span>Pozycje netto</span><strong>${money(t.itemsNet)}</strong></div><div><span>Dostawa netto</span><strong>${money(t.delivery)}</strong></div><div><span>Rabat netto</span><strong>-${money(t.discount)}</strong></div><div><span>VAT ${t.vatRate}%</span><strong>${money(t.vat)}</strong></div><div class="total"><span>Razem brutto</span><strong>${money(t.gross)}</strong></div>`;
+  box.innerHTML=`<div><span>Pozycje netto</span><strong>${money(t.itemsNet)}</strong></div><div><span>Dostawa netto</span><strong>${money(t.delivery)}</strong></div><div><span>VAT ${t.vatRate}%</span><strong>${money(t.vat)}</strong></div><div class="total"><span>Razem brutto</span><strong>${money(t.gross)}</strong></div>`;
 }
 function pdfText(v){return String(v??'').replace(/\s+/g,' ').trim()}
 function itemTechText(i){
@@ -280,14 +304,16 @@ function itemTechText(i){
 function buildClientPdfDefinition(){
   const r=window.quoteRequest||{},c=r.customers||{},t=currentQuoteTotals();
   const quoteNo=el('client-quote-number').value.trim(),validUntil=el('client-valid-until').value,deliveryTime=el('client-delivery-time').value.trim(),paymentTerms=el('client-payment-terms').value.trim();
-  const body=[[{text:'Poz.',style:'th'},{text:'Opis',style:'th'},{text:'Wymiar',style:'th'},{text:'Ilość',style:'th'},{text:'Cena netto/szt.',style:'th'},{text:'Cena brutto/szt.',style:'th'},{text:'Wartość netto',style:'th'},{text:'Wartość brutto',style:'th'},{text:'Termin realizacji',style:'th'}]];
+  const body=[[{text:'Poz.',style:'th'},{text:'Produkt i konfiguracja',style:'th'},{text:'Ilość',style:'th'},{text:'Cena brutto/szt.',style:'th'},{text:'Wartość brutto',style:'th'},{text:'Termin realizacji',style:'th'}]];
   (window.quoteItems||[]).forEach(i=>{
     const p=itemPricingFromRow(i.id),qty=Number(i.quantity||0),lineNet=p.net*qty,lineGross=p.gross*qty;
     const main=[i.item_name||`Front ${i.position}`,i.profile_code,i.finish,i.filling].filter(Boolean).join(' / ');
     const tech=itemTechText(i),delivery=document.querySelector(`.item-delivery-input[data-item=\"${i.id}\"]`)?.value.trim()||deliveryTime||'—';
-    body.push([String(i.position),{text:pdfText(main)+(tech?`\n${pdfText(tech)}`:''),fontSize:7.6},`${i.height_mm||'—'} x ${i.width_mm||'—'} mm`,String(qty),money(p.net),money(p.gross),money(lineNet),money(lineGross),pdfText(delivery)]);
+    const heading=[i.item_name||`Front ${i.position}`,i.profile_code,i.finish,i.filling].filter(Boolean).join(' · ');
+    const details=[`Wymiary: ${i.height_mm||'—'} × ${i.width_mm||'—'} mm`,tech].filter(Boolean).join('\n• ');
+    body.push([String(i.position),{stack:[{text:pdfText(heading),bold:true,fontSize:8.2,margin:[0,0,0,4]},{text:`• ${pdfText(details)}`,fontSize:7.4,lineHeight:1.25}]},String(qty),money(p.gross),money(lineGross),normalizeDeliveryTime(delivery)]);
   });
-  const terms=[];if(deliveryTime)terms.push(`Termin realizacji: ${deliveryTime}`);if(paymentTerms)terms.push(`Forma płatności: ${paymentTerms}`);terms.push('Konto bankowe: 62 1020 1185 0000 4702 0310 8537');terms.push('Bank: PKO Bank Polski');if(validUntil)terms.push(`Oferta ważna do: ${new Date(validUntil+'T12:00:00').toLocaleDateString('pl-PL')}`);
+  const terms=[];if(deliveryTime)terms.push(`Termin realizacji: ${normalizeDeliveryTime(deliveryTime)}`);if(paymentTerms)terms.push(`Forma płatności: ${paymentTerms}`);terms.push('PKO Bank Polski · konto: 62 1020 1185 0000 4702 0310 8537');if(validUntil)terms.push(`Oferta ważna do: ${new Date(validUntil+'T12:00:00').toLocaleDateString('pl-PL')}`);
   return {
     pageSize:'A4',pageOrientation:'landscape',pageMargins:[28,34,28,42],defaultStyle:{font:'Roboto',fontSize:8.2,color:'#18212b'},
     footer:(current,pageCount)=>({text:`idea-nova.pl - oferta ${quoteNo} | strona ${current} z ${pageCount}`,alignment:'center',fontSize:7,color:'#687789',margin:[0,15,0,0]}),
@@ -295,8 +321,8 @@ function buildClientPdfDefinition(){
       {columns:[{stack:[{text:'idea-nova.pl',fontSize:20,bold:true,color:'#173b63'},{text:'Fronty aluminiowe - oferta handlowa',fontSize:9,color:'#687789'}]},{stack:[{text:quoteNo,alignment:'right',fontSize:13,bold:true},{text:`Data: ${new Date().toLocaleDateString('pl-PL')}`,alignment:'right',fontSize:8,color:'#687789'}]}]},
       {canvas:[{type:'line',x1:0,y1:8,x2:527,y2:8,lineWidth:1,lineColor:'#173b63'}],margin:[0,0,0,18]},
       {columns:[{width:'50%',stack:[{text:'Dane klienta',style:'label'},{text:pdfText(c.name||'—'),bold:true},{text:pdfText(c.company_name||'')},{text:pdfText(c.email||'')},{text:pdfText(c.phone||'')},{text:pdfText([c.address,c.zip,c.city].filter(Boolean).join(', '))}]},{width:'50%',stack:[{text:'Zapytanie',style:'label'},{text:pdfText(r.request_number||'—'),bold:true},{text:validUntil?`Ważna do: ${new Date(validUntil+'T12:00:00').toLocaleDateString('pl-PL')}`:'',margin:[0,3,0,0]}]}],margin:[0,0,0,18]},
-      {table:{headerRows:1,widths:[22,'*',52,26,66,66,66,66,70],body},layout:{fillColor:(row)=>row===0?'#173b63':(row%2===0?'#f4f7fb':null),hLineColor:'#dbe3ec',vLineColor:'#dbe3ec',paddingLeft:()=>5,paddingRight:()=>5,paddingTop:()=>6,paddingBottom:()=>6}},
-      {columns:[{width:'*',text:''},{width:230,table:{widths:['*',85],body:[['Pozycje netto',money(t.itemsNet)],['Dostawa netto',money(t.delivery)],['Rabat netto',`-${money(t.discount)}`],[{text:'RAZEM NETTO',bold:true},{text:money(t.net),bold:true}],[`VAT ${t.vatRate}%`,money(t.vat)],[{text:'RAZEM BRUTTO',bold:true},{text:money(t.gross),bold:true,color:'#173b63'}]]},layout:'lightHorizontalLines'}],margin:[0,16,0,0]},
+      {table:{headerRows:1,widths:[24,'*',34,72,72,82],body},layout:{fillColor:(row)=>row===0?'#173b63':(row%2===0?'#f4f7fb':null),hLineColor:'#dbe3ec',vLineColor:'#dbe3ec',paddingLeft:()=>5,paddingRight:()=>5,paddingTop:()=>6,paddingBottom:()=>6}},
+      {columns:[{width:'*',text:''},{width:230,table:{widths:['*',85],body:[['Pozycje netto',money(t.itemsNet)],['Dostawa netto',money(t.delivery)],[{text:'RAZEM NETTO',bold:true},{text:money(t.net),bold:true}],[`VAT ${t.vatRate}%`,money(t.vat)],[{text:'RAZEM BRUTTO',bold:true},{text:money(t.gross),bold:true,color:'#173b63'}]]},layout:'lightHorizontalLines'}],margin:[0,16,0,0]},
       terms.length?{stack:[{text:'Warunki oferty',style:'label',margin:[0,20,0,6]},...terms.map(x=>({text:`- ${x}`,margin:[0,2,0,0]}))]}:{},
       {text:'Dziękujemy za zapytanie. W przypadku zmian parametrów przygotujemy kolejną wersję oferty.',margin:[0,22,0,0],fontSize:8,color:'#687789'}
     ],styles:{th:{color:'#ffffff',bold:true,fontSize:7.5},label:{fontSize:8,bold:true,color:'#687789',margin:[0,0,0,5]}}
@@ -320,7 +346,7 @@ async function generateAndSaveClientPdf(btn){
     const safe=quoteNo.replace(/[^a-zA-Z0-9_-]/g,'_'),path=`${window.requestId}/${safe}-V${nextVersion}-${Date.now()}.pdf`;
     const up=await sb.storage.from('client-documents').upload(path,blob,{contentType:'application/pdf',upsert:false});if(up.error)throw up.error;
     const t=currentQuoteTotals(),user=(await sb.auth.getUser()).data.user;
-    const ins=await sb.from('client_quotes').insert({request_id:window.requestId,quote_number:quoteNo,version:nextVersion,status:'draft',valid_until:el('client-valid-until').value||null,delivery_time:el('client-delivery-time').value.trim()||null,payment_terms:el('client-payment-terms').value.trim()||null,delivery_net:t.delivery,discount_net:t.discount,vat_rate:t.vatRate,net_total:t.net,vat_total:t.vat,gross_total:t.gross,client_pdf_path:path,created_by:user.id});if(ins.error)throw ins.error;
+    const ins=await sb.from('client_quotes').insert({request_id:window.requestId,quote_number:quoteNo,version:nextVersion,status:'draft',valid_until:el('client-valid-until').value||null,delivery_time:el('client-delivery-time').value.trim()||null,payment_terms:el('client-payment-terms').value.trim()||null,delivery_net:t.delivery,discount_net:0,vat_rate:t.vatRate,net_total:t.net,vat_total:t.vat,gross_total:t.gross,client_pdf_path:path,created_by:user.id});if(ins.error)throw ins.error;
     showMsg(`PDF zapisany jako ${quoteNo}/V${nextVersion}.`,'success');await loadQuote();
   }catch(e){showMsg(e.message||String(e),'error')}finally{if(btn){btn.disabled=false;btn.textContent='Generuj i zapisz PDF'}}
 }
