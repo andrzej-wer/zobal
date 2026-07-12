@@ -335,9 +335,9 @@ function buildClientPdfDefinition(){
         body:[[
           {stack:[
             {columns:[
-              {width:'auto',text:`Poz. ${i.position}`,style:'positionBadge'},
-              {width:'*',text:pdfText(heading),style:'itemTitle',margin:[9,1,0,0]}
-            ],margin:[0,0,0,8]},
+              {width:18,table:{widths:[18],heights:[18],body:[[{text:String(i.position),style:'positionNumber'}]]},layout:{fillColor:()=>navy,hLineWidth:()=>0,vLineWidth:()=>0,paddingLeft:()=>0,paddingRight:()=>0,paddingTop:()=>4,paddingBottom:()=>3}},
+              {width:'*',text:pdfText(heading),style:'itemTitle',margin:[8,1,0,0]}
+            ],margin:[0,0,0,7]},
             ...details,
             {table:{
               widths:['*','*','*'],
@@ -381,24 +381,21 @@ function buildClientPdfDefinition(){
         {stack:[{text:quoteNo,fontSize:14,bold:true,alignment:'right',color:navyDark},{text:`Data wyceny: ${new Date().toLocaleDateString('pl-PL')}`,alignment:'right',color:muted,margin:[0,3,0,0]}]}
       ]},
       {canvas:[{type:'line',x1:0,y1:9,x2:527,y2:9,lineWidth:1.2,lineColor:navy}],margin:[0,0,0,14]},
-      {columns:[
-        {width:'55%',table:{widths:['*'],body:[[{stack:[
-          {text:'DANE KLIENTA',fontSize:7.5,bold:true,color:muted,margin:[0,0,0,5]},
-          {text:pdfText(c.name||'—'),fontSize:10.5,bold:true,color:navyDark},
-          {text:pdfText(c.company_name||'')},{text:pdfText(c.email||'')},{text:pdfText(c.phone||'')},
-          {text:pdfText([c.address,c.zip,c.city].filter(Boolean).join(', '))}
-        ]}]]},layout:{fillColor:()=>soft,hLineColor:()=>line,vLineColor:()=>line,paddingLeft:()=>11,paddingRight:()=>11,paddingTop:()=>9,paddingBottom:()=>9}},
-        {width:'3%',text:''},
-        {width:'42%',table:{widths:['*'],body:[
-          [{stack:[{text:'NUMER ZAPYTANIA',fontSize:7.5,bold:true,color:muted},{text:pdfText(r.request_number||'—'),bold:true,color:navyDark,margin:[0,4,0,0]}]}],
-          [{columns:[{width:'50%',stack:[{text:'WAŻNA DO',fontSize:7.5,bold:true,color:muted},{text:validText,margin:[0,4,0,0]}]},{width:'50%',stack:[{text:'TERMIN OGÓLNY',fontSize:7.5,bold:true,color:muted},{text:normalizeDeliveryTime(deliveryTime),margin:[0,4,0,0]}]}]}],
-          [{stack:[{text:'FORMA PŁATNOŚCI',fontSize:7.5,bold:true,color:muted},{text:paymentTerms||'—',margin:[0,4,0,0]}]}]
-        ]},layout:{fillColor:()=>soft,hLineColor:()=>line,vLineColor:()=>line,paddingLeft:()=>10,paddingRight:()=>10,paddingTop:()=>8,paddingBottom:()=>8}}
-      ],margin:[0,0,0,14]},
-      {columns:[
-        {text:'POZYCJE OFERTY',fontSize:9,bold:true,color:navyDark},
-        {text:`Liczba pozycji: ${(window.quoteItems||[]).length}`,fontSize:8,color:muted,alignment:'right'}
-      ],margin:[0,0,0,7]},
+      {table:{widths:['*'],body:[[{stack:[
+        {text:'DANE KLIENTA',fontSize:7.3,bold:true,color:muted,margin:[0,0,0,5]},
+        {columns:[
+          {width:'36%',stack:[
+            {text:pdfText(c.name||'—'),fontSize:10,bold:true,color:navyDark},
+            {text:pdfText(c.company_name||''),fontSize:8.2,color:text,margin:[0,2,0,0]}
+          ]},
+          {width:'28%',stack:[
+            {text:pdfText(c.email||'—'),fontSize:8.2},
+            {text:pdfText(c.phone||'—'),fontSize:8.2,margin:[0,2,0,0]}
+          ]},
+          {width:'36%',text:pdfText([c.address,c.zip,c.city].filter(Boolean).join(', ')||'—'),fontSize:8.2}
+        ]}
+      ]}]]},layout:{fillColor:()=>soft,hLineColor:()=>line,vLineColor:()=>line,paddingLeft:()=>10,paddingRight:()=>10,paddingTop:()=>8,paddingBottom:()=>8},margin:[0,0,0,12]},
+      {text:'POZYCJE OFERTY',fontSize:9,bold:true,color:navyDark,margin:[0,0,0,7]},
       ...itemBlocks,
       {columns:[
         {width:'52%',stack:[
@@ -417,7 +414,7 @@ function buildClientPdfDefinition(){
       {text:'Dziękujemy za zapytanie. W przypadku zmian parametrów przygotujemy kolejną wersję oferty.',margin:[0,18,0,0],fontSize:8,color:muted}
     ],
     styles:{
-      positionBadge:{fontSize:7.5,bold:true,color:blue,background:softBlue,margin:[5,3,5,3]},
+      positionNumber:{fontSize:7.5,bold:true,color:white,alignment:'center'},
       itemTitle:{fontSize:10.5,bold:true,color:navyDark},
       itemLabel:{fontSize:8,color:muted,bold:true},
       itemValue:{fontSize:8.3,color:text},
