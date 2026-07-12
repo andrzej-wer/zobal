@@ -135,15 +135,16 @@ function renderQuote(){
   el('notes').value=r.internal_notes||'';
   const generalDelivery=el('client-delivery-time')?.value||'';
   el('items-body').innerHTML=window.quoteItems.map(i=>{
-    const purchase=Number(i.purchase_unit_net||0),margin=(i.margin_percent===null||i.margin_percent===undefined||Number(i.margin_percent)===0)?40:Number(i.margin_percent),calculatedSale=purchase*(1+margin/100),sale=Number(i.sale_unit_net||0)>0?Number(i.sale_unit_net):calculatedSale,gross=sale*1.23,lineGross=gross*Number(i.quantity||0);
+    const purchase=Number(i.purchase_unit_net||0),margin=(i.margin_percent===null||i.margin_percent===undefined)?40:Number(i.margin_percent),calculatedSale=purchase*(1+margin/100),sale=Number(i.sale_unit_net||0)>0?Number(i.sale_unit_net):calculatedSale,gross=sale*1.23,lineGross=gross*Number(i.quantity||0);
     const delivery=i.delivery_time||generalDelivery;
-    return `<tr data-item-row="${i.id}"><td><span class="position-chip">${i.position}</span></td><td class="item-description">${renderItemDetails(i)}</td><td class="compact-cell qty-cell">${i.quantity}</td><td class="purchase-cell"><input type="number" step="0.01" min="0" value="${purchase||''}" data-item="${i.id}" class="purchase-input"></td><td class="margin-cell"><div class="input-suffix"><input type="number" step="0.01" min="0" value="${margin}" data-item="${i.id}" class="margin-input"><span>%</span></div></td><td class="client-net-cell"><input type="number" step="0.01" min="0" value="${sale.toFixed(2)}" data-item="${i.id}" class="client-net-input"></td><td class="client-gross-value">${money(gross)}</td><td class="line-gross-value">${money(lineGross)}</td><td class="item-actions"><button class="btn btn-light btn-small" onclick="openItemEditor('${i.id}')">Edytuj</button><button class="btn btn-danger btn-small" onclick="deleteQuoteItem('${i.id}')">Usuń</button></td></tr>`;
+    return `<tr data-item-row="${i.id}"><td><span class="position-chip">${i.position}</span></td><td class="item-description">${renderItemDetails(i)}</td><td class="compact-cell qty-cell">${i.quantity}</td><td class="purchase-cell"><input type="number" step="0.01" min="0" value="${purchase||''}" data-item="${i.id}" class="purchase-input"></td><td class="margin-cell"><div class="input-suffix"><input type="number" step="0.01" min="0" value="${margin}" data-item="${i.id}" class="margin-input"><span>%</span></div></td><td class="client-net-cell"><input type="number" step="0.01" min="0" value="${sale||''}" data-item="${i.id}" class="client-net-input"></td><td class="client-gross-value">${money(gross)}</td><td class="line-gross-value">${money(lineGross)}</td><td class="item-actions"><button class="btn btn-light btn-small" onclick="openItemEditor('${i.id}')">Edytuj</button><button class="btn btn-danger btn-small" onclick="deleteQuoteItem('${i.id}')">Usuń</button></td></tr>`;
   }).join('');
   el('zobal-list').innerHTML=window.zobals.map(z=>`<div class="doc-row internal"><div><strong>${escHtml(z.zobal_number)}</strong><br><span class="muted">${fmtDate(z.calculation_date||z.created_at)} · ${z.purchase_net?money(z.purchase_net)+' netto':'bez kwoty'}</span></div><div>${z.document_path?`<button class="btn btn-light" onclick="openPrivateFile('zobal-internal','${z.document_path}')">Otwórz PDF</button>`:''}</div></div>`).join('')||'<p class="muted">Brak kalkulacji Zobal.</p>';
   el('client-docs').innerHTML=window.clientQuotes.map(q=>`<div class="doc-row client"><div><strong>${escHtml(q.quote_number)}/V${q.version}</strong><br><span class="muted">${money(q.gross_total)} brutto · ${escHtml(q.status)}</span></div><div>${q.client_pdf_path?`<button class="btn btn-light" onclick="openPrivateFile('client-documents','${q.client_pdf_path}')">Otwórz PDF</button>`:''}</div></div>`).join('')||'<p class="muted">Brak dokumentów dla klienta.</p>';
   initClientQuoteFields();
   updateQuoteSummary();
-  document.querySelectorAll('.purchase-input,.margin-input').forEach(x=>x.addEventListener('input',()=>{recalculateItemRow(x.dataset.item,'formula');updateQuoteSummary()}));
+  document.querySelectorAll('.purchase-input').forEach(x=>x.addEventListener('input',()=>{recalculateItemRow(x.dataset.item,'purchase');updateQuoteSummary()}));
+  document.querySelectorAll('.margin-input').forEach(x=>x.addEventListener('input',()=>{recalculateItemRow(x.dataset.item,'margin');updateQuoteSummary()}));
   document.querySelectorAll('.client-net-input').forEach(x=>x.addEventListener('input',()=>{recalculateItemRow(x.dataset.item,'net');updateQuoteSummary()}));
   document.querySelectorAll('.item-delivery-input').forEach(x=>x.addEventListener('input',()=>{x.dataset.custom='1'}));
   el('client-delivery-net')?.addEventListener('input',updateQuoteSummary);
@@ -152,43 +153,66 @@ function renderQuote(){
 function itemPricingFromRow(itemId){
   const row=document.querySelector(`tr[data-item-row="${itemId}"]`);
   const purchase=Number(row?.querySelector('.purchase-input')?.value||0);
-  let margin=Number(row?.querySelector('.margin-input')?.value||0);
-  let net=Number(row?.querySelector('.client-net-input')?.value||0);
-  if(!Number.isFinite(net)||net<0)net=0;
-  if(purchase>0&&net>0)margin=((net/purchase)-1)*100;
+  const margin=Number(row?.querySelector('.margin-input')?.value||0);
+  const netInput=Number(row?.querySelector('.client-net-input')?.value||0);
+  const net=netInput>0?netInput:purchase*(1+margin/100);
   const gross=net*1.23;
   return {purchase,margin,net,gross};
 }
-function recalculateItemRow(itemId,source='formula'){
+function recalculateItemRow(itemId,source='margin'){
   const row=document.querySelector(`tr[data-item-row="${itemId}"]`),item=(window.quoteItems||[]).find(i=>i.id===itemId);if(!row||!item)return;
   const purchase=Number(row.querySelector('.purchase-input')?.value||0);
   const marginInput=row.querySelector('.margin-input');
   const netInput=row.querySelector('.client-net-input');
-  let margin=Number(marginInput?.value||0);
-  let net=Number(netInput?.value||0);
-
+  let margin=Number(marginInput?.value||0),net=Number(netInput?.value||0);
   if(source==='net'){
-    if(purchase>0){
-      margin=((net/purchase)-1)*100;
-      if(marginInput)marginInput.value=(Math.round(margin*100)/100).toFixed(2);
-    }
+    margin=purchase>0?((net/purchase)-1)*100:0;
+    if(marginInput)marginInput.value=Number.isFinite(margin)?margin.toFixed(2):'0';
   }else{
     net=purchase*(1+margin/100);
-    if(netInput)netInput.value=(Math.round(net*100)/100).toFixed(2);
+    if(netInput)netInput.value=Number.isFinite(net)?net.toFixed(2):'0';
   }
-
   const gross=net*1.23;
   row.querySelector('.client-gross-value').textContent=money(gross);
   row.querySelector('.line-gross-value').textContent=money(gross*Number(item.quantity||0));
 }
-async function saveQuote(){
+async function savePricingData(){
   const updates=(window.quoteItems||[]).map(i=>{
     const p=itemPricingFromRow(i.id),delivery=document.querySelector(`.item-delivery-input[data-item="${i.id}"]`)?.value.trim()||null;
     return sb.from('quote_items').update({purchase_unit_net:p.purchase,margin_percent:p.margin,sale_unit_net:p.net,delivery_time:delivery}).eq('id',i.id);
   });
   updates.push(sb.from('quote_requests').update({source:el('source')?.value||'manual',status:el('status').value,internal_notes:el('notes').value,updated_at:new Date().toISOString()}).eq('id',window.requestId));
-  const results=await Promise.all(updates); const err=results.find(x=>x.error)?.error;
-  if(err){showMsg(err.message,'error');return}showMsg('Zapisano zmiany.','success');await loadQuote();
+  const results=await Promise.all(updates);
+  const err=results.find(x=>x.error)?.error;
+  if(err)throw err;
+}
+async function saveClientQuoteDraft(){
+  const quoteNo=el('client-quote-number').value.trim();
+  if(!quoteNo)throw new Error('Podaj numer oferty.');
+  const t=currentQuoteTotals(),user=(await sb.auth.getUser()).data.user;
+  const payload={request_id:window.requestId,quote_number:quoteNo,status:'draft',valid_until:el('client-valid-until').value||null,delivery_time:el('client-delivery-time').value.trim()||null,payment_terms:el('client-payment-terms').value.trim()||null,delivery_net:t.delivery,discount_net:0,vat_rate:t.vatRate,net_total:t.net,vat_total:t.vat,gross_total:t.gross,created_by:user.id};
+  const existing=(window.clientQuotes||[]).find(q=>q.quote_number===quoteNo&&q.status==='draft'&&!q.client_pdf_path);
+  if(existing){
+    const {error}=await sb.from('client_quotes').update(payload).eq('id',existing.id);if(error)throw error;
+    return existing.id;
+  }
+  const version=Math.max(0,...(window.clientQuotes||[]).filter(q=>q.quote_number===quoteNo).map(q=>Number(q.version||0)))+1;
+  const {data,error}=await sb.from('client_quotes').insert({...payload,version}).select('id').single();if(error)throw error;
+  return data.id;
+}
+async function savePricingQuote(btn){
+  if(btn){btn.disabled=true;btn.textContent='Zapisywanie...'}
+  try{
+    await savePricingData();
+    await saveClientQuoteDraft();
+    showMsg('Zapisano ceny i całą wycenę. Możesz wrócić później lub wygenerować PDF.','success');
+    await loadQuote();
+  }catch(e){showMsg(e.message||String(e),'error')}
+  finally{if(btn){btn.disabled=false;btn.textContent='Zapisz wycenę'}}
+}
+async function saveQuote(){
+  try{await savePricingData();showMsg('Zapisano zmiany.','success');await loadQuote()}
+  catch(e){showMsg(e.message||String(e),'error')}
 }
 
 function setSelectOptions(id,values,current){
@@ -454,15 +478,17 @@ async function generateAndSaveClientPdf(btn){
   if(!validateClientPdf())return;
   if(btn){btn.disabled=true;btn.textContent='Generowanie...'}
   try{
-    const priceUpdates=(window.quoteItems||[]).map(i=>{const p=itemPricingFromRow(i.id),delivery=document.querySelector(`.item-delivery-input[data-item="${i.id}"]`)?.value.trim()||null;return sb.from('quote_items').update({purchase_unit_net:p.purchase,margin_percent:p.margin,sale_unit_net:p.net,delivery_time:delivery}).eq('id',i.id)});
-    const priceResults=await Promise.all(priceUpdates);const priceErr=priceResults.find(x=>x.error)?.error;if(priceErr)throw priceErr;
+    await savePricingData();
+    const draftId=await saveClientQuoteDraft();
     const blob=await new Promise(resolve=>pdfMake.createPdf(buildClientPdfDefinition()).getBlob(resolve));
-    const quoteNo=el('client-quote-number').value.trim(),nextVersion=Math.max(0,...(window.clientQuotes||[]).filter(q=>q.quote_number===quoteNo).map(q=>Number(q.version||0)))+1;
-    const safe=quoteNo.replace(/[^a-zA-Z0-9_-]/g,'_'),path=`${window.requestId}/${safe}-V${nextVersion}-${Date.now()}.pdf`;
+    const quoteNo=el('client-quote-number').value.trim();
+    const draft=(window.clientQuotes||[]).find(q=>q.id===draftId)||(window.clientQuotes||[]).find(q=>q.quote_number===quoteNo&&q.status==='draft'&&!q.client_pdf_path);
+    const version=draft?Number(draft.version||1):Math.max(0,...(window.clientQuotes||[]).filter(q=>q.quote_number===quoteNo).map(q=>Number(q.version||0)))+1;
+    const safe=quoteNo.replace(/[^a-zA-Z0-9_-]/g,'_'),path=`${window.requestId}/${safe}-V${version}-${Date.now()}.pdf`;
     const up=await sb.storage.from('client-documents').upload(path,blob,{contentType:'application/pdf',upsert:false});if(up.error)throw up.error;
-    const t=currentQuoteTotals(),user=(await sb.auth.getUser()).data.user;
-    const ins=await sb.from('client_quotes').insert({request_id:window.requestId,quote_number:quoteNo,version:nextVersion,status:'draft',valid_until:el('client-valid-until').value||null,delivery_time:el('client-delivery-time').value.trim()||null,payment_terms:el('client-payment-terms').value.trim()||null,delivery_net:t.delivery,discount_net:0,vat_rate:t.vatRate,net_total:t.net,vat_total:t.vat,gross_total:t.gross,client_pdf_path:path,created_by:user.id});if(ins.error)throw ins.error;
-    showMsg(`PDF zapisany jako ${quoteNo}/V${nextVersion}.`,'success');await loadQuote();
+    const t=currentQuoteTotals();
+    const {error}=await sb.from('client_quotes').update({client_pdf_path:path,valid_until:el('client-valid-until').value||null,delivery_time:el('client-delivery-time').value.trim()||null,payment_terms:el('client-payment-terms').value.trim()||null,delivery_net:t.delivery,vat_rate:t.vatRate,net_total:t.net,vat_total:t.vat,gross_total:t.gross}).eq('id',draftId);if(error)throw error;
+    showMsg(`PDF zapisany jako ${quoteNo}/V${version}.`,'success');await loadQuote();
   }catch(e){showMsg(e.message||String(e),'error')}finally{if(btn){btn.disabled=false;btn.textContent='Generuj i zapisz PDF'}}
 }
 
