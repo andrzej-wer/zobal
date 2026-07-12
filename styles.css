@@ -43,3 +43,12 @@
 
 /* Zapis wyceny i edytowalna cena netto */
 .client-net-cell{width:112px;min-width:112px}.client-net-input{width:96px;min-width:96px;padding:8px;font-weight:700}.pdf-actions .btn:first-child{background:#157347;color:#fff}
+
+
+/* Pasek nagłówka wyceny v16 */
+.quote-header-bar{display:grid;grid-template-columns:minmax(250px,1.4fr) minmax(180px,.8fr) minmax(220px,1fr) auto;gap:18px;align-items:end;padding:18px 20px;margin-bottom:18px}
+.quote-header-item{min-width:0}.quote-header-item label{margin-bottom:7px}.quote-header-number{align-self:center}.quote-header-number .quote-number{padding:0;font-size:24px;line-height:1.1;white-space:nowrap}
+.quote-header-action{display:flex;justify-content:flex-end;align-items:end}.quote-header-action .btn{min-height:42px;white-space:nowrap}
+.quote-customer-card{margin-bottom:18px}
+@media(max-width:900px){.quote-header-bar{grid-template-columns:1fr 1fr}.quote-header-action{justify-content:flex-start}.quote-header-number{grid-column:1/-1}}
+@media(max-width:600px){.quote-header-bar{grid-template-columns:1fr}.quote-header-number{grid-column:auto}.quote-header-action .btn{width:100%}}
