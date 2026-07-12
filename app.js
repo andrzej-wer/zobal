@@ -134,7 +134,7 @@ function renderQuote(){
   el('items-body').innerHTML=window.quoteItems.map(i=>{
     const purchase=Number(i.purchase_unit_net||0),margin=(i.margin_percent===null||i.margin_percent===undefined||Number(i.margin_percent)===0)?40:Number(i.margin_percent),sale=purchase*(1+margin/100),gross=sale*1.23,lineGross=gross*Number(i.quantity||0);
     const delivery=i.delivery_time||generalDelivery;
-    return `<tr data-item-row="${i.id}"><td>${i.position}</td><td class="item-description">${renderItemDetails(i)}</td><td>${i.quantity}</td><td class="purchase-cell"><input type="number" step="0.01" min="0" value="${purchase||''}" data-item="${i.id}" class="purchase-input"></td><td class="margin-cell"><input type="number" step="0.01" min="0" value="${margin}" data-item="${i.id}" class="margin-input"></td><td class="client-gross-value">${money(gross)}</td><td class="line-gross-value">${money(lineGross)}</td><td class="delivery-cell"><input type="text" value="${escHtml(delivery)}" data-item="${i.id}" data-custom="${i.delivery_time?'1':'0'}" class="item-delivery-input" placeholder="np. 4–8 tygodni"></td><td class="item-actions"><button class="btn btn-light btn-small" onclick="openItemEditor('${i.id}')">Edytuj</button><button class="btn btn-danger btn-small" onclick="deleteQuoteItem('${i.id}')">Usuń</button></td></tr>`;
+    return `<tr data-item-row="${i.id}"><td><span class="position-chip">${i.position}</span></td><td class="item-description">${renderItemDetails(i)}</td><td class="compact-cell">${i.quantity}</td><td class="purchase-cell"><input type="number" step="0.01" min="0" value="${purchase||''}" data-item="${i.id}" class="purchase-input"></td><td class="margin-cell"><div class="input-suffix"><input type="number" step="0.01" min="0" value="${margin}" data-item="${i.id}" class="margin-input"><span>%</span></div></td><td class="client-net-value">${money(sale)}</td><td class="client-gross-value">${money(gross)}</td><td class="line-gross-value">${money(lineGross)}</td><td class="delivery-cell"><div class="delivery-input-wrap"><input type="text" value="${escHtml(delivery)}" data-item="${i.id}" data-custom="${i.delivery_time?'1':'0'}" class="item-delivery-input" placeholder="4–8"><small>tygodnie</small></div></td><td class="item-actions"><button class="btn btn-light btn-small" onclick="openItemEditor('${i.id}')">Edytuj</button><button class="btn btn-danger btn-small" onclick="deleteQuoteItem('${i.id}')">Usuń</button></td></tr>`;
   }).join('');
   el('zobal-list').innerHTML=window.zobals.map(z=>`<div class="doc-row internal"><div><strong>${escHtml(z.zobal_number)}</strong><br><span class="muted">${fmtDate(z.calculation_date||z.created_at)} · ${z.purchase_net?money(z.purchase_net)+' netto':'bez kwoty'}</span></div><div>${z.document_path?`<button class="btn btn-light" onclick="openPrivateFile('zobal-internal','${z.document_path}')">Otwórz PDF</button>`:''}</div></div>`).join('')||'<p class="muted">Brak kalkulacji Zobal.</p>';
   el('client-docs').innerHTML=window.clientQuotes.map(q=>`<div class="doc-row client"><div><strong>${escHtml(q.quote_number)}/V${q.version}</strong><br><span class="muted">${money(q.gross_total)} brutto · ${escHtml(q.status)}</span></div><div>${q.client_pdf_path?`<button class="btn btn-light" onclick="openPrivateFile('client-documents','${q.client_pdf_path}')">Otwórz PDF</button>`:''}</div></div>`).join('')||'<p class="muted">Brak dokumentów dla klienta.</p>';
@@ -154,6 +154,7 @@ function itemPricingFromRow(itemId){
 function recalculateItemRow(itemId){
   const row=document.querySelector(`tr[data-item-row="${itemId}"]`),item=(window.quoteItems||[]).find(i=>i.id===itemId);if(!row||!item)return;
   const p=itemPricingFromRow(itemId);
+  row.querySelector('.client-net-value').textContent=money(p.net);
   row.querySelector('.client-gross-value').textContent=money(p.gross);
   row.querySelector('.line-gross-value').textContent=money(p.gross*Number(item.quantity||0));
 }
@@ -304,29 +305,41 @@ function itemTechText(i){
 function buildClientPdfDefinition(){
   const r=window.quoteRequest||{},c=r.customers||{},t=currentQuoteTotals();
   const quoteNo=el('client-quote-number').value.trim(),validUntil=el('client-valid-until').value,deliveryTime=el('client-delivery-time').value.trim(),paymentTerms=el('client-payment-terms').value.trim();
-  const body=[[{text:'Poz.',style:'th'},{text:'Produkt i konfiguracja',style:'th'},{text:'Ilość',style:'th'},{text:'Cena brutto/szt.',style:'th'},{text:'Wartość brutto',style:'th'},{text:'Termin realizacji',style:'th'}]];
-  (window.quoteItems||[]).forEach(i=>{
-    const p=itemPricingFromRow(i.id),qty=Number(i.quantity||0),lineNet=p.net*qty,lineGross=p.gross*qty;
-    const main=[i.item_name||`Front ${i.position}`,i.profile_code,i.finish,i.filling].filter(Boolean).join(' / ');
-    const tech=itemTechText(i),delivery=document.querySelector(`.item-delivery-input[data-item=\"${i.id}\"]`)?.value.trim()||deliveryTime||'—';
+  const navy='#12375d',soft='#f4f7fb',line='#dbe3ec',muted='#66778a';
+  const itemBlocks=(window.quoteItems||[]).map(i=>{
+    const p=itemPricingFromRow(i.id),qty=Number(i.quantity||0),lineGross=p.gross*qty;
+    const delivery=document.querySelector(`.item-delivery-input[data-item="${i.id}"]`)?.value.trim()||deliveryTime||'—';
     const heading=[i.item_name||`Front ${i.position}`,i.profile_code,i.finish,i.filling].filter(Boolean).join(' · ');
-    const details=[`Wymiary: ${i.height_mm||'—'} × ${i.width_mm||'—'} mm`,tech].filter(Boolean).join('\n• ');
-    body.push([String(i.position),{stack:[{text:pdfText(heading),bold:true,fontSize:8.2,margin:[0,0,0,4]},{text:`• ${pdfText(details)}`,fontSize:7.4,lineHeight:1.25}]},String(qty),money(p.gross),money(lineGross),normalizeDeliveryTime(delivery)]);
+    const tech=[];
+    tech.push({text:[{text:'Wymiary: ',bold:true,color:muted},`${i.height_mm||'—'} × ${i.width_mm||'—'} mm`],margin:[0,2,0,0]});
+    if(i.hinges_type&&i.hinges_type!=='Brak')tech.push({text:[{text:'Zawiasy / otwory: ',bold:true,color:muted},pdfText(itemTechText({...i,stiffener_type:'Brak',customer_notes:null}).replace('Zawiasy/otwory: ',''))],margin:[0,2,0,0]});
+    if(i.stiffener_type&&i.stiffener_type!=='Brak'){
+      let st=i.stiffener_type;if(i.stiffener_quantity)st+=`, ilość: ${i.stiffener_quantity}`;const sp=formatPositions(i.stiffener_positions);if(sp&&sp!=='—')st+=`, położenie: ${sp}`;
+      tech.push({text:[{text:'Szpros / usztywnienie: ',bold:true,color:muted},pdfText(st)],margin:[0,2,0,0]});
+    }
+    if(i.customer_notes)tech.push({text:[{text:'Uwagi: ',bold:true,color:muted},pdfText(i.customer_notes)],margin:[0,2,0,0]});
+    return {table:{widths:[28,'*',38,72,72,76,70],body:[[
+      {text:String(i.position),bold:true,alignment:'center',margin:[0,8,0,0]},
+      {stack:[{text:pdfText(heading),bold:true,fontSize:10,color:navy,margin:[0,0,0,5]},...tech]},
+      {text:String(qty),alignment:'center',margin:[0,8,0,0]},
+      {text:money(p.net),bold:true,alignment:'right',margin:[0,8,0,0]},
+      {text:money(p.gross),bold:true,alignment:'right',margin:[0,8,0,0]},
+      {text:money(lineGross),bold:true,alignment:'right',color:navy,margin:[0,8,0,0]},
+      {stack:[{text:normalizeDeliveryTime(delivery),bold:true,alignment:'center'},{text:'termin realizacji',fontSize:7,color:muted,alignment:'center',margin:[0,3,0,0]}],margin:[0,5,0,0]}
+    ]]},layout:{fillColor:()=>soft,hLineColor:()=>line,vLineColor:()=>line,paddingLeft:()=>8,paddingRight:()=>8,paddingTop:()=>8,paddingBottom:()=>8},margin:[0,0,0,9]};
   });
-  const terms=[];if(deliveryTime)terms.push(`Termin realizacji: ${normalizeDeliveryTime(deliveryTime)}`);if(paymentTerms)terms.push(`Forma płatności: ${paymentTerms}`);terms.push('PKO Bank Polski · konto: 62 1020 1185 0000 4702 0310 8537');if(validUntil)terms.push(`Oferta ważna do: ${new Date(validUntil+'T12:00:00').toLocaleDateString('pl-PL')}`);
-  return {
-    pageSize:'A4',pageOrientation:'landscape',pageMargins:[28,34,28,42],defaultStyle:{font:'Roboto',fontSize:8.2,color:'#18212b'},
-    footer:(current,pageCount)=>({text:`idea-nova.pl - oferta ${quoteNo} | strona ${current} z ${pageCount}`,alignment:'center',fontSize:7,color:'#687789',margin:[0,15,0,0]}),
+  const validText=validUntil?new Date(validUntil+'T12:00:00').toLocaleDateString('pl-PL'):'—';
+  return {pageSize:'A4',pageOrientation:'landscape',pageMargins:[30,30,30,40],defaultStyle:{font:'Roboto',fontSize:8.5,color:'#18212b'},
+    footer:(current,pageCount)=>({columns:[{text:`idea-nova.pl · ${quoteNo}`,alignment:'left'},{text:`strona ${current} z ${pageCount}`,alignment:'right'}],fontSize:7,color:muted,margin:[30,12,30,0]}),
     content:[
-      {columns:[{stack:[{text:'idea-nova.pl',fontSize:20,bold:true,color:'#173b63'},{text:'Fronty aluminiowe - oferta handlowa',fontSize:9,color:'#687789'}]},{stack:[{text:quoteNo,alignment:'right',fontSize:13,bold:true},{text:`Data: ${new Date().toLocaleDateString('pl-PL')}`,alignment:'right',fontSize:8,color:'#687789'}]}]},
-      {canvas:[{type:'line',x1:0,y1:8,x2:527,y2:8,lineWidth:1,lineColor:'#173b63'}],margin:[0,0,0,18]},
-      {columns:[{width:'50%',stack:[{text:'Dane klienta',style:'label'},{text:pdfText(c.name||'—'),bold:true},{text:pdfText(c.company_name||'')},{text:pdfText(c.email||'')},{text:pdfText(c.phone||'')},{text:pdfText([c.address,c.zip,c.city].filter(Boolean).join(', '))}]},{width:'50%',stack:[{text:'Zapytanie',style:'label'},{text:pdfText(r.request_number||'—'),bold:true},{text:validUntil?`Ważna do: ${new Date(validUntil+'T12:00:00').toLocaleDateString('pl-PL')}`:'',margin:[0,3,0,0]}]}],margin:[0,0,0,18]},
-      {table:{headerRows:1,widths:[24,'*',34,72,72,82],body},layout:{fillColor:(row)=>row===0?'#173b63':(row%2===0?'#f4f7fb':null),hLineColor:'#dbe3ec',vLineColor:'#dbe3ec',paddingLeft:()=>5,paddingRight:()=>5,paddingTop:()=>6,paddingBottom:()=>6}},
-      {columns:[{width:'*',text:''},{width:230,table:{widths:['*',85],body:[['Pozycje netto',money(t.itemsNet)],['Dostawa netto',money(t.delivery)],[{text:'RAZEM NETTO',bold:true},{text:money(t.net),bold:true}],[`VAT ${t.vatRate}%`,money(t.vat)],[{text:'RAZEM BRUTTO',bold:true},{text:money(t.gross),bold:true,color:'#173b63'}]]},layout:'lightHorizontalLines'}],margin:[0,16,0,0]},
-      terms.length?{stack:[{text:'Warunki oferty',style:'label',margin:[0,20,0,6]},...terms.map(x=>({text:`- ${x}`,margin:[0,2,0,0]}))]}:{},
-      {text:'Dziękujemy za zapytanie. W przypadku zmian parametrów przygotujemy kolejną wersję oferty.',margin:[0,22,0,0],fontSize:8,color:'#687789'}
-    ],styles:{th:{color:'#ffffff',bold:true,fontSize:7.5},label:{fontSize:8,bold:true,color:'#687789',margin:[0,0,0,5]}}
-  };
+      {columns:[{stack:[{text:'idea-nova.pl',fontSize:22,bold:true,color:navy},{text:'Fronty aluminiowe · oferta handlowa',fontSize:9,color:muted,margin:[0,2,0,0]}]},{stack:[{text:quoteNo,fontSize:15,bold:true,alignment:'right',color:navy},{text:`Data wyceny: ${new Date().toLocaleDateString('pl-PL')}`,alignment:'right',color:muted,margin:[0,3,0,0]}]}]},
+      {canvas:[{type:'line',x1:0,y1:10,x2:780,y2:10,lineWidth:1.5,lineColor:navy}],margin:[0,0,0,18]},
+      {columns:[{width:'52%',table:{widths:['*'],body:[[{stack:[{text:'DANE KLIENTA',fontSize:8,bold:true,color:muted,margin:[0,0,0,6]},{text:pdfText(c.name||'—'),fontSize:11,bold:true,color:navy},{text:pdfText(c.company_name||'')},{text:pdfText(c.email||'')},{text:pdfText(c.phone||'')},{text:pdfText([c.address,c.zip,c.city].filter(Boolean).join(', '))}]}]]},layout:{fillColor:()=>soft,hLineColor:()=>line,vLineColor:()=>line,paddingLeft:()=>12,paddingRight:()=>12,paddingTop:()=>10,paddingBottom:()=>10}},{width:'4%',text:''},{width:'44%',table:{widths:['*','*'],body:[[{stack:[{text:'NUMER ZAPYTANIA',fontSize:8,bold:true,color:muted},{text:pdfText(r.request_number||'—'),bold:true,color:navy,margin:[0,5,0,0]}]},{stack:[{text:'OFERTA WAŻNA DO',fontSize:8,bold:true,color:muted},{text:validText,bold:true,color:navy,margin:[0,5,0,0]}]}],[{stack:[{text:'FORMA PŁATNOŚCI',fontSize:8,bold:true,color:muted},{text:paymentTerms||'—',margin:[0,5,0,0]}]},{stack:[{text:'TERMIN OGÓLNY',fontSize:8,bold:true,color:muted},{text:normalizeDeliveryTime(deliveryTime),margin:[0,5,0,0]}]}]]},layout:{fillColor:()=>soft,hLineColor:()=>line,vLineColor:()=>line,paddingLeft:()=>10,paddingRight:()=>10,paddingTop:()=>10,paddingBottom:()=>10}}],margin:[0,0,0,16]},
+      {table:{widths:[28,'*',38,72,72,76,70],body:[[{text:'POZ.',style:'pdfTh'},{text:'PRODUKT I KONFIGURACJA',style:'pdfTh'},{text:'ILOŚĆ',style:'pdfTh'},{text:'CENA NETTO/SZT.',style:'pdfTh'},{text:'CENA BRUTTO/SZT.',style:'pdfTh'},{text:'WARTOŚĆ BRUTTO',style:'pdfTh'},{text:'TERMIN',style:'pdfTh'}]]},layout:{fillColor:()=>navy,hLineColor:()=>navy,vLineColor:()=>navy,paddingLeft:()=>7,paddingRight:()=>7,paddingTop:()=>7,paddingBottom:()=>7},margin:[0,0,0,7]},
+      ...itemBlocks,
+      {columns:[{width:'55%',stack:[{text:'WARUNKI OFERTY',fontSize:8,bold:true,color:muted,margin:[0,6,0,7]},{text:`Forma płatności: ${paymentTerms||'—'}`,margin:[0,2,0,0]},{text:'PKO Bank Polski · 62 1020 1185 0000 4702 0310 8537',margin:[0,2,0,0]},{text:`Oferta ważna do: ${validText}`,margin:[0,2,0,0]}]},{width:'45%',table:{widths:['*',105],body:[['Pozycje netto',money(t.itemsNet)],['Dostawa netto',money(t.delivery)],[`VAT ${t.vatRate}%`,money(t.vat)],[{text:'RAZEM BRUTTO',bold:true,fontSize:11,color:navy},{text:money(t.gross),bold:true,fontSize:13,color:navy}]]},layout:{fillColor:(row)=>row===3?soft:null,hLineColor:()=>line,vLineColor:()=>line,paddingLeft:()=>10,paddingRight:()=>10,paddingTop:()=>7,paddingBottom:()=>7}}],margin:[0,12,0,0]},
+      {text:'Dziękujemy za zapytanie. W przypadku zmian parametrów przygotujemy kolejną wersję oferty.',margin:[0,20,0,0],fontSize:8,color:muted}
+    ],styles:{pdfTh:{color:'#fff',bold:true,fontSize:7.5,alignment:'center'}}};
 }
 function validateClientPdf(){
   if(!el('client-quote-number').value.trim()){showMsg('Podaj numer oferty.','error');return false}
@@ -349,4 +362,47 @@ async function generateAndSaveClientPdf(btn){
     const ins=await sb.from('client_quotes').insert({request_id:window.requestId,quote_number:quoteNo,version:nextVersion,status:'draft',valid_until:el('client-valid-until').value||null,delivery_time:el('client-delivery-time').value.trim()||null,payment_terms:el('client-payment-terms').value.trim()||null,delivery_net:t.delivery,discount_net:0,vat_rate:t.vatRate,net_total:t.net,vat_total:t.vat,gross_total:t.gross,client_pdf_path:path,created_by:user.id});if(ins.error)throw ins.error;
     showMsg(`PDF zapisany jako ${quoteNo}/V${nextVersion}.`,'success');await loadQuote();
   }catch(e){showMsg(e.message||String(e),'error')}finally{if(btn){btn.disabled=false;btn.textContent='Generuj i zapisz PDF'}}
+}
+
+
+// Ręczne tworzenie wyceny
+window.manualDraftItems=[];
+async function loadManualQuotePage(){
+  const session=await requireAuth();if(!session||!configured)return;
+  el('user-email').textContent=session.user.email;renderManualDraftItems();
+}
+function manualItemTitle(i){return [i.item_name||`Front ${i.position}`,i.profile_code,i.finish,i.filling].filter(Boolean).join(' · ')}
+function renderManualDraftItems(){
+  const box=el('manual-items');if(!box)return;
+  const rows=window.manualDraftItems||[];
+  box.innerHTML=rows.length?rows.map((i,idx)=>`<div class="manual-item-card"><div><div class="item-title">${escHtml(manualItemTitle(i))}</div><div class="manual-item-meta">${i.height_mm} × ${i.width_mm} mm · ilość: ${i.quantity}</div><div class="manual-item-meta">Zawiasy / otwory: ${escHtml(i.hinges_type||'Brak')}</div><div class="manual-item-meta">Szpros / usztywnienie: ${escHtml(i.stiffener_type||'Brak')}</div></div><div class="toolbar"><button class="btn btn-light btn-small" onclick="openManualItemEditor(${idx})">Edytuj</button><button class="btn btn-danger btn-small" onclick="deleteManualDraftItem(${idx})">Usuń</button></div></div>`).join(''):'<div class="manual-empty">Nie dodano jeszcze żadnego frontu.</div>';
+}
+function openManualItemEditor(index=null){
+  const item=index===null?null:(window.manualDraftItems||[])[index];
+  setSelectOptions('manual-item-profile',FRONT_PROFILES,item?.profile_code||FRONT_PROFILES[0]);setSelectOptions('manual-item-finish',FRONT_FINISHES,item?.finish||FRONT_FINISHES[0]);setSelectOptions('manual-item-fill',FRONT_FILLS,item?.filling||'BEZ SZKŁA');
+  el('manual-item-index').value=index===null?'':String(index);el('manual-item-title').textContent=item?'Edytuj front':'Dodaj front';el('manual-item-name').value=item?.item_name||'';el('manual-item-qty').value=item?.quantity||1;el('manual-item-position').value=item?.position||((window.manualDraftItems||[]).length+1);el('manual-item-height').value=item?.height_mm||'';el('manual-item-width').value=item?.width_mm||'';
+  el('manual-hinges-type').value=item?.hinges_type||'Brak';el('manual-hinge-side').value=item?.hinge_side||'Lewa';el('manual-hinge-brand').value=item?.hinge_brand||'Blum';el('manual-hinge-qty').value=item?.hinge_quantity||2;el('manual-hinge-mode').value=item?.hinge_positions?.mode||'symetryczne';el('manual-hinge-positions').value=positionsToInput(item?.hinge_positions);
+  el('manual-stiffener-type').value=item?.stiffener_type||'Brak';el('manual-stiffener-qty').value=item?.stiffener_quantity||1;el('manual-stiffener-mode').value=item?.stiffener_positions?.mode||'symetryczne';el('manual-stiffener-positions').value=positionsToInput(item?.stiffener_positions);el('manual-item-notes').value=item?.customer_notes||'';
+  refreshManualEditorVisibility();el('manual-item-modal').classList.add('open');document.body.classList.add('modal-open');
+}
+function closeManualItemEditor(){el('manual-item-modal')?.classList.remove('open');document.body.classList.remove('modal-open')}
+function refreshManualEditorVisibility(){
+  const h=el('manual-hinges-type')?.value!=='Brak';document.querySelectorAll('.manual-hinge-field').forEach(x=>x.style.display=h?'':'none');document.querySelectorAll('.manual-hinge-positions').forEach(x=>x.style.display=h&&el('manual-hinge-mode').value==='wlasne'?'':'none');
+  const st=el('manual-stiffener-type')?.value!=='Brak';document.querySelectorAll('.manual-stiffener-field').forEach(x=>x.style.display=st?'':'none');document.querySelectorAll('.manual-stiffener-positions').forEach(x=>x.style.display=st&&el('manual-stiffener-mode').value==='wlasne'?'':'none');
+}
+function saveManualDraftItem(){
+  const index=el('manual-item-index').value;const q=Number(el('manual-item-qty').value),h=Number(el('manual-item-height').value),w=Number(el('manual-item-width').value),pos=Number(el('manual-item-position').value);if(!q||!h||!w||!pos){showMsg('Uzupełnij pozycję, ilość i wymiary frontu.','error');return}
+  const ht=el('manual-hinges-type').value,st=el('manual-stiffener-type').value;
+  const item={position:pos,item_name:el('manual-item-name').value.trim()||null,quantity:q,height_mm:h,width_mm:w,profile_code:el('manual-item-profile').value,finish:el('manual-item-finish').value,filling:el('manual-item-fill').value,hinges_type:ht,hinge_side:ht==='Brak'?null:el('manual-hinge-side').value,hinge_brand:ht==='Otwory + zawiasy'?el('manual-hinge-brand').value:null,hinge_quantity:ht==='Brak'?null:Number(el('manual-hinge-qty').value||0)||null,hinge_positions:ht==='Brak'?null:inputToPositions(el('manual-hinge-positions').value,el('manual-hinge-mode').value),stiffener_type:st,stiffener_quantity:st==='Brak'?null:Number(el('manual-stiffener-qty').value||0)||null,stiffener_positions:st==='Brak'?null:inputToPositions(el('manual-stiffener-positions').value,el('manual-stiffener-mode').value),customer_notes:el('manual-item-notes').value.trim()||null,margin_percent:40};
+  if(index==='')window.manualDraftItems.push(item);else window.manualDraftItems[Number(index)]=item;closeManualItemEditor();renderManualDraftItems();
+}
+function deleteManualDraftItem(index){window.manualDraftItems.splice(index,1);window.manualDraftItems.forEach((x,i)=>x.position=i+1);renderManualDraftItems()}
+async function createManualQuote(btn){
+  const name=el('manual-name').value.trim();if(!name){showMsg('Podaj imię i nazwisko klienta.','error');return}if(!(window.manualDraftItems||[]).length){showMsg('Dodaj co najmniej jeden front.','error');return}
+  if(btn){btn.disabled=true;btn.textContent='Tworzenie...'}
+  try{
+    const customer={name,company_name:el('manual-company').value.trim()||null,email:el('manual-email').value.trim()||null,phone:el('manual-phone').value.trim()||null,nip:el('manual-nip').value.trim()||null,address:el('manual-address').value.trim()||null,zip:el('manual-zip').value.trim()||null,city:el('manual-city').value.trim()||null};
+    const {data,error}=await sb.rpc('create_manual_quote_request',{p_customer:customer,p_items:window.manualDraftItems,p_notes:el('manual-notes').value.trim()||null,p_source:el('manual-source').value,p_status:el('manual-status').value});if(error)throw error;
+    const result=Array.isArray(data)?data[0]:data;location.href=`quote.html?id=${result.request_id}`;
+  }catch(e){showMsg(e.message||String(e),'error')}finally{if(btn){btn.disabled=false;btn.textContent='Utwórz wycenę'}}
 }
