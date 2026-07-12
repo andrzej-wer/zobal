@@ -94,11 +94,14 @@ function renderItemDetails(i){
   const files=(window.requestAttachments||[]).filter(a=>Number(a.item_position)===Number(i.position));
   const filesHtml=files.length?`<li><span>Załączniki</span><div class="item-files">${files.map(a=>`<button type="button" class="btn btn-light btn-file" onclick="openPrivateFile('request-attachments','${escHtml(a.storage_path)}')">📎 ${escHtml(a.original_name)}</button>`).join('')}</div></li>`:'';
   const title=[i.item_name||`Front ${i.position}`,i.profile_code,i.finish,i.filling].filter(Boolean).join(' · ');
-  return `<div class="item-title">${escHtml(title)}</div>
+  const generalDelivery=el('client-delivery-time')?.value||'';
+  const delivery=i.delivery_time||generalDelivery;
+  return `<div class="item-title item-title-nowrap" title="${escHtml(title)}">${escHtml(title)}</div>
     <ul class="item-specs">
       <li><span>Wymiary</span><strong>${escHtml(i.height_mm||'—')} × ${escHtml(i.width_mm||'—')} mm</strong></li>
       <li><span>Zawiasy / otwory</span><strong>${escHtml(hinges==='Brak'?'Brak':hingeParts.join(' · '))}</strong></li>
       <li><span>Szpros / usztywnienie</span><strong>${escHtml(stiffener==='Brak'?'Brak':stiffenerParts.join(' · '))}</strong></li>
+      <li class="delivery-spec"><span>Termin realizacji</span><div class="delivery-inline-wrap"><input type="text" value="${escHtml(delivery)}" data-item="${i.id}" data-custom="${i.delivery_time?'1':'0'}" class="item-delivery-input item-delivery-inline" placeholder="4–8"><small>tygodnie</small></div></li>
       ${i.customer_notes?`<li><span>Uwagi</span><strong>${escHtml(i.customer_notes)}</strong></li>`:''}
       ${filesHtml}
     </ul>`;
@@ -134,7 +137,7 @@ function renderQuote(){
   el('items-body').innerHTML=window.quoteItems.map(i=>{
     const purchase=Number(i.purchase_unit_net||0),margin=(i.margin_percent===null||i.margin_percent===undefined||Number(i.margin_percent)===0)?40:Number(i.margin_percent),sale=purchase*(1+margin/100),gross=sale*1.23,lineGross=gross*Number(i.quantity||0);
     const delivery=i.delivery_time||generalDelivery;
-    return `<tr data-item-row="${i.id}"><td><span class="position-chip">${i.position}</span></td><td class="item-description">${renderItemDetails(i)}</td><td class="compact-cell">${i.quantity}</td><td class="purchase-cell"><input type="number" step="0.01" min="0" value="${purchase||''}" data-item="${i.id}" class="purchase-input"></td><td class="margin-cell"><div class="input-suffix"><input type="number" step="0.01" min="0" value="${margin}" data-item="${i.id}" class="margin-input"><span>%</span></div></td><td class="client-net-value">${money(sale)}</td><td class="client-gross-value">${money(gross)}</td><td class="line-gross-value">${money(lineGross)}</td><td class="delivery-cell"><div class="delivery-input-wrap"><input type="text" value="${escHtml(delivery)}" data-item="${i.id}" data-custom="${i.delivery_time?'1':'0'}" class="item-delivery-input" placeholder="4–8"><small>tygodnie</small></div></td><td class="item-actions"><button class="btn btn-light btn-small" onclick="openItemEditor('${i.id}')">Edytuj</button><button class="btn btn-danger btn-small" onclick="deleteQuoteItem('${i.id}')">Usuń</button></td></tr>`;
+    return `<tr data-item-row="${i.id}"><td><span class="position-chip">${i.position}</span></td><td class="item-description">${renderItemDetails(i)}</td><td class="compact-cell qty-cell">${i.quantity}</td><td class="purchase-cell"><input type="number" step="0.01" min="0" value="${purchase||''}" data-item="${i.id}" class="purchase-input"></td><td class="margin-cell"><div class="input-suffix"><input type="number" step="0.01" min="0" value="${margin}" data-item="${i.id}" class="margin-input"><span>%</span></div></td><td class="client-net-value">${money(sale)}</td><td class="client-gross-value">${money(gross)}</td><td class="line-gross-value">${money(lineGross)}</td><td class="item-actions"><button class="btn btn-light btn-small" onclick="openItemEditor('${i.id}')">Edytuj</button><button class="btn btn-danger btn-small" onclick="deleteQuoteItem('${i.id}')">Usuń</button></td></tr>`;
   }).join('');
   el('zobal-list').innerHTML=window.zobals.map(z=>`<div class="doc-row internal"><div><strong>${escHtml(z.zobal_number)}</strong><br><span class="muted">${fmtDate(z.calculation_date||z.created_at)} · ${z.purchase_net?money(z.purchase_net)+' netto':'bez kwoty'}</span></div><div>${z.document_path?`<button class="btn btn-light" onclick="openPrivateFile('zobal-internal','${z.document_path}')">Otwórz PDF</button>`:''}</div></div>`).join('')||'<p class="muted">Brak kalkulacji Zobal.</p>';
   el('client-docs').innerHTML=window.clientQuotes.map(q=>`<div class="doc-row client"><div><strong>${escHtml(q.quote_number)}/V${q.version}</strong><br><span class="muted">${money(q.gross_total)} brutto · ${escHtml(q.status)}</span></div><div>${q.client_pdf_path?`<button class="btn btn-light" onclick="openPrivateFile('client-documents','${q.client_pdf_path}')">Otwórz PDF</button>`:''}</div></div>`).join('')||'<p class="muted">Brak dokumentów dla klienta.</p>';
@@ -312,20 +315,20 @@ function buildClientPdfDefinition(){
     const heading=[i.item_name||`Front ${i.position}`,i.profile_code,i.finish,i.filling].filter(Boolean).join(' · ');
     const tech=[];
     tech.push({text:[{text:'Wymiary: ',bold:true,color:muted},`${i.height_mm||'—'} × ${i.width_mm||'—'} mm`],margin:[0,2,0,0]});
+    tech.push({text:[{text:'Termin realizacji: ',bold:true,color:muted},normalizeDeliveryTime(delivery)],margin:[0,2,0,0]});
     if(i.hinges_type&&i.hinges_type!=='Brak')tech.push({text:[{text:'Zawiasy / otwory: ',bold:true,color:muted},pdfText(itemTechText({...i,stiffener_type:'Brak',customer_notes:null}).replace('Zawiasy/otwory: ',''))],margin:[0,2,0,0]});
     if(i.stiffener_type&&i.stiffener_type!=='Brak'){
       let st=i.stiffener_type;if(i.stiffener_quantity)st+=`, ilość: ${i.stiffener_quantity}`;const sp=formatPositions(i.stiffener_positions);if(sp&&sp!=='—')st+=`, położenie: ${sp}`;
       tech.push({text:[{text:'Szpros / usztywnienie: ',bold:true,color:muted},pdfText(st)],margin:[0,2,0,0]});
     }
     if(i.customer_notes)tech.push({text:[{text:'Uwagi: ',bold:true,color:muted},pdfText(i.customer_notes)],margin:[0,2,0,0]});
-    return {table:{widths:[28,'*',38,72,72,76,70],body:[[
+    return {table:{widths:[28,'*',38,76,76,84],body:[[
       {text:String(i.position),bold:true,alignment:'center',margin:[0,8,0,0]},
       {stack:[{text:pdfText(heading),bold:true,fontSize:10,color:navy,margin:[0,0,0,5]},...tech]},
       {text:String(qty),alignment:'center',margin:[0,8,0,0]},
       {text:money(p.net),bold:true,alignment:'right',margin:[0,8,0,0]},
       {text:money(p.gross),bold:true,alignment:'right',margin:[0,8,0,0]},
-      {text:money(lineGross),bold:true,alignment:'right',color:navy,margin:[0,8,0,0]},
-      {stack:[{text:normalizeDeliveryTime(delivery),bold:true,alignment:'center'},{text:'termin realizacji',fontSize:7,color:muted,alignment:'center',margin:[0,3,0,0]}],margin:[0,5,0,0]}
+      {text:money(lineGross),bold:true,alignment:'right',color:navy,margin:[0,8,0,0]}
     ]]},layout:{fillColor:()=>soft,hLineColor:()=>line,vLineColor:()=>line,paddingLeft:()=>8,paddingRight:()=>8,paddingTop:()=>8,paddingBottom:()=>8},margin:[0,0,0,9]};
   });
   const validText=validUntil?new Date(validUntil+'T12:00:00').toLocaleDateString('pl-PL'):'—';
@@ -335,7 +338,7 @@ function buildClientPdfDefinition(){
       {columns:[{stack:[{text:'idea-nova.pl',fontSize:22,bold:true,color:navy},{text:'Fronty aluminiowe · oferta handlowa',fontSize:9,color:muted,margin:[0,2,0,0]}]},{stack:[{text:quoteNo,fontSize:15,bold:true,alignment:'right',color:navy},{text:`Data wyceny: ${new Date().toLocaleDateString('pl-PL')}`,alignment:'right',color:muted,margin:[0,3,0,0]}]}]},
       {canvas:[{type:'line',x1:0,y1:10,x2:780,y2:10,lineWidth:1.5,lineColor:navy}],margin:[0,0,0,18]},
       {columns:[{width:'52%',table:{widths:['*'],body:[[{stack:[{text:'DANE KLIENTA',fontSize:8,bold:true,color:muted,margin:[0,0,0,6]},{text:pdfText(c.name||'—'),fontSize:11,bold:true,color:navy},{text:pdfText(c.company_name||'')},{text:pdfText(c.email||'')},{text:pdfText(c.phone||'')},{text:pdfText([c.address,c.zip,c.city].filter(Boolean).join(', '))}]}]]},layout:{fillColor:()=>soft,hLineColor:()=>line,vLineColor:()=>line,paddingLeft:()=>12,paddingRight:()=>12,paddingTop:()=>10,paddingBottom:()=>10}},{width:'4%',text:''},{width:'44%',table:{widths:['*','*'],body:[[{stack:[{text:'NUMER ZAPYTANIA',fontSize:8,bold:true,color:muted},{text:pdfText(r.request_number||'—'),bold:true,color:navy,margin:[0,5,0,0]}]},{stack:[{text:'OFERTA WAŻNA DO',fontSize:8,bold:true,color:muted},{text:validText,bold:true,color:navy,margin:[0,5,0,0]}]}],[{stack:[{text:'FORMA PŁATNOŚCI',fontSize:8,bold:true,color:muted},{text:paymentTerms||'—',margin:[0,5,0,0]}]},{stack:[{text:'TERMIN OGÓLNY',fontSize:8,bold:true,color:muted},{text:normalizeDeliveryTime(deliveryTime),margin:[0,5,0,0]}]}]]},layout:{fillColor:()=>soft,hLineColor:()=>line,vLineColor:()=>line,paddingLeft:()=>10,paddingRight:()=>10,paddingTop:()=>10,paddingBottom:()=>10}}],margin:[0,0,0,16]},
-      {table:{widths:[28,'*',38,72,72,76,70],body:[[{text:'POZ.',style:'pdfTh'},{text:'PRODUKT I KONFIGURACJA',style:'pdfTh'},{text:'ILOŚĆ',style:'pdfTh'},{text:'CENA NETTO/SZT.',style:'pdfTh'},{text:'CENA BRUTTO/SZT.',style:'pdfTh'},{text:'WARTOŚĆ BRUTTO',style:'pdfTh'},{text:'TERMIN',style:'pdfTh'}]]},layout:{fillColor:()=>navy,hLineColor:()=>navy,vLineColor:()=>navy,paddingLeft:()=>7,paddingRight:()=>7,paddingTop:()=>7,paddingBottom:()=>7},margin:[0,0,0,7]},
+      {table:{widths:[28,'*',38,76,76,84],body:[[{text:'POZ.',style:'pdfTh'},{text:'PRODUKT I KONFIGURACJA',style:'pdfTh'},{text:'ILOŚĆ',style:'pdfTh'},{text:'CENA NETTO/SZT.',style:'pdfTh'},{text:'CENA BRUTTO/SZT.',style:'pdfTh'},{text:'WARTOŚĆ BRUTTO',style:'pdfTh'},{text:'TERMIN',style:'pdfTh'}]]},layout:{fillColor:()=>navy,hLineColor:()=>navy,vLineColor:()=>navy,paddingLeft:()=>7,paddingRight:()=>7,paddingTop:()=>7,paddingBottom:()=>7},margin:[0,0,0,7]},
       ...itemBlocks,
       {columns:[{width:'55%',stack:[{text:'WARUNKI OFERTY',fontSize:8,bold:true,color:muted,margin:[0,6,0,7]},{text:`Forma płatności: ${paymentTerms||'—'}`,margin:[0,2,0,0]},{text:'PKO Bank Polski · 62 1020 1185 0000 4702 0310 8537',margin:[0,2,0,0]},{text:`Oferta ważna do: ${validText}`,margin:[0,2,0,0]}]},{width:'45%',table:{widths:['*',105],body:[['Pozycje netto',money(t.itemsNet)],['Dostawa netto',money(t.delivery)],[`VAT ${t.vatRate}%`,money(t.vat)],[{text:'RAZEM BRUTTO',bold:true,fontSize:11,color:navy},{text:money(t.gross),bold:true,fontSize:13,color:navy}]]},layout:{fillColor:(row)=>row===3?soft:null,hLineColor:()=>line,vLineColor:()=>line,paddingLeft:()=>10,paddingRight:()=>10,paddingTop:()=>7,paddingBottom:()=>7}}],margin:[0,12,0,0]},
       {text:'Dziękujemy za zapytanie. W przypadku zmian parametrów przygotujemy kolejną wersję oferty.',margin:[0,20,0,0],fontSize:8,color:muted}
