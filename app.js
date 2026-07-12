@@ -308,41 +308,126 @@ function itemTechText(i){
 function buildClientPdfDefinition(){
   const r=window.quoteRequest||{},c=r.customers||{},t=currentQuoteTotals();
   const quoteNo=el('client-quote-number').value.trim(),validUntil=el('client-valid-until').value,deliveryTime=el('client-delivery-time').value.trim(),paymentTerms=el('client-payment-terms').value.trim();
-  const navy='#12375d',soft='#f4f7fb',line='#dbe3ec',muted='#66778a';
+  const navy='#12375d',soft='#f4f7fb',line='#dbe3ec',muted='#66778a',white='#ffffff';
+  const validText=validUntil?new Date(validUntil+'T12:00:00').toLocaleDateString('pl-PL'):'—';
+
   const itemBlocks=(window.quoteItems||[]).map(i=>{
     const p=itemPricingFromRow(i.id),qty=Number(i.quantity||0),lineGross=p.gross*qty;
     const delivery=document.querySelector(`.item-delivery-input[data-item="${i.id}"]`)?.value.trim()||deliveryTime||'—';
     const heading=[i.item_name||`Front ${i.position}`,i.profile_code,i.finish,i.filling].filter(Boolean).join(' · ');
-    const tech=[];
-    tech.push({text:[{text:'Wymiary: ',bold:true,color:muted},`${i.height_mm||'—'} × ${i.width_mm||'—'} mm`],margin:[0,2,0,0]});
-    tech.push({text:[{text:'Termin realizacji: ',bold:true,color:muted},normalizeDeliveryTime(delivery)],margin:[0,2,0,0]});
-    if(i.hinges_type&&i.hinges_type!=='Brak')tech.push({text:[{text:'Zawiasy / otwory: ',bold:true,color:muted},pdfText(itemTechText({...i,stiffener_type:'Brak',customer_notes:null}).replace('Zawiasy/otwory: ',''))],margin:[0,2,0,0]});
-    if(i.stiffener_type&&i.stiffener_type!=='Brak'){
-      let st=i.stiffener_type;if(i.stiffener_quantity)st+=`, ilość: ${i.stiffener_quantity}`;const sp=formatPositions(i.stiffener_positions);if(sp&&sp!=='—')st+=`, położenie: ${sp}`;
-      tech.push({text:[{text:'Szpros / usztywnienie: ',bold:true,color:muted},pdfText(st)],margin:[0,2,0,0]});
+    const detailRows=[];
+    detailRows.push([{text:'Wymiary',style:'itemLabel'},{text:`${i.height_mm||'—'} × ${i.width_mm||'—'} mm`,style:'itemValue'}]);
+    detailRows.push([{text:'Termin realizacji',style:'itemLabel'},{text:normalizeDeliveryTime(delivery),style:'itemValue'}]);
+    if(i.hinges_type&&i.hinges_type!=='Brak'){
+      detailRows.push([{text:'Zawiasy / otwory',style:'itemLabel'},{text:pdfText(itemTechText({...i,stiffener_type:'Brak',customer_notes:null}).replace('Zawiasy/otwory: ','')),style:'itemValue'}]);
     }
-    if(i.customer_notes)tech.push({text:[{text:'Uwagi: ',bold:true,color:muted},pdfText(i.customer_notes)],margin:[0,2,0,0]});
-    return {table:{widths:[28,'*',38,76,76,84],body:[[
-      {text:String(i.position),bold:true,alignment:'center',margin:[0,8,0,0]},
-      {stack:[{text:pdfText(heading),bold:true,fontSize:10,color:navy,margin:[0,0,0,5]},...tech]},
-      {text:String(qty),alignment:'center',margin:[0,8,0,0]},
-      {text:money(p.net),bold:true,alignment:'right',margin:[0,8,0,0]},
-      {text:money(p.gross),bold:true,alignment:'right',margin:[0,8,0,0]},
-      {text:money(lineGross),bold:true,alignment:'right',color:navy,margin:[0,8,0,0]}
-    ]]},layout:{fillColor:()=>soft,hLineColor:()=>line,vLineColor:()=>line,paddingLeft:()=>8,paddingRight:()=>8,paddingTop:()=>8,paddingBottom:()=>8},margin:[0,0,0,9]};
+    if(i.stiffener_type&&i.stiffener_type!=='Brak'){
+      let st=i.stiffener_type;
+      if(i.stiffener_quantity)st+=`, ilość: ${i.stiffener_quantity}`;
+      const sp=formatPositions(i.stiffener_positions);if(sp&&sp!=='—')st+=`, położenie: ${sp}`;
+      detailRows.push([{text:'Szpros / usztywnienie',style:'itemLabel'},{text:pdfText(st),style:'itemValue'}]);
+    }
+    if(i.customer_notes)detailRows.push([{text:'Uwagi',style:'itemLabel'},{text:pdfText(i.customer_notes),style:'itemValue'}]);
+
+    const priceRow={
+      table:{
+        widths:['*','*','*','*'],
+        body:[
+          [
+            {text:'ILOŚĆ',style:'priceLabel'},
+            {text:'CENA NETTO/SZT.',style:'priceLabel'},
+            {text:'CENA BRUTTO/SZT.',style:'priceLabel'},
+            {text:'WARTOŚĆ BRUTTO',style:'priceLabel'}
+          ],
+          [
+            {text:String(qty),style:'priceValue'},
+            {text:money(p.net),style:'priceValue'},
+            {text:money(p.gross),style:'priceValue'},
+            {text:money(lineGross),style:'priceValueStrong'}
+          ]
+        ]
+      },
+      layout:{
+        fillColor:(row)=>row===0?soft:white,
+        hLineColor:()=>line,vLineColor:()=>line,
+        paddingLeft:()=>7,paddingRight:()=>7,paddingTop:()=>5,paddingBottom:()=>5
+      },
+      margin:[0,8,0,0]
+    };
+
+    return {
+      table:{
+        widths:[32,'*'],
+        body:[[ 
+          {text:String(i.position),bold:true,fontSize:11,color:white,alignment:'center',fillColor:navy,margin:[0,5,0,0]},
+          {stack:[
+            {text:pdfText(heading),bold:true,fontSize:11,color:navy,margin:[0,0,0,7]},
+            {table:{widths:[92,'*'],body:detailRows},layout:{hLineWidth:()=>0,vLineWidth:()=>0,paddingLeft:()=>0,paddingRight:()=>6,paddingTop:()=>2,paddingBottom:()=>2}},
+            priceRow
+          ]}
+        ]]
+      },
+      layout:{
+        fillColor:()=>white,
+        hLineColor:()=>line,vLineColor:()=>line,
+        paddingLeft:()=>9,paddingRight:()=>9,paddingTop:()=>9,paddingBottom:()=>9
+      },
+      margin:[0,0,0,10]
+    };
   });
-  const validText=validUntil?new Date(validUntil+'T12:00:00').toLocaleDateString('pl-PL'):'—';
-  return {pageSize:'A4',pageOrientation:'landscape',pageMargins:[30,30,30,40],defaultStyle:{font:'Roboto',fontSize:8.5,color:'#18212b'},
-    footer:(current,pageCount)=>({columns:[{text:`idea-nova.pl · ${quoteNo}`,alignment:'left'},{text:`strona ${current} z ${pageCount}`,alignment:'right'}],fontSize:7,color:muted,margin:[30,12,30,0]}),
+
+  return {
+    pageSize:'A4',
+    pageOrientation:'portrait',
+    pageMargins:[34,30,34,42],
+    defaultStyle:{font:'Roboto',fontSize:8.7,color:'#18212b'},
+    footer:(current,pageCount)=>({columns:[{text:`idea-nova.pl · ${quoteNo}`,alignment:'left'},{text:`strona ${current} z ${pageCount}`,alignment:'right'}],fontSize:7,color:muted,margin:[34,12,34,0]}),
     content:[
-      {columns:[{stack:[{text:'idea-nova.pl',fontSize:22,bold:true,color:navy},{text:'Fronty aluminiowe · oferta handlowa',fontSize:9,color:muted,margin:[0,2,0,0]}]},{stack:[{text:quoteNo,fontSize:15,bold:true,alignment:'right',color:navy},{text:`Data wyceny: ${new Date().toLocaleDateString('pl-PL')}`,alignment:'right',color:muted,margin:[0,3,0,0]}]}]},
-      {canvas:[{type:'line',x1:0,y1:10,x2:780,y2:10,lineWidth:1.5,lineColor:navy}],margin:[0,0,0,18]},
-      {columns:[{width:'52%',table:{widths:['*'],body:[[{stack:[{text:'DANE KLIENTA',fontSize:8,bold:true,color:muted,margin:[0,0,0,6]},{text:pdfText(c.name||'—'),fontSize:11,bold:true,color:navy},{text:pdfText(c.company_name||'')},{text:pdfText(c.email||'')},{text:pdfText(c.phone||'')},{text:pdfText([c.address,c.zip,c.city].filter(Boolean).join(', '))}]}]]},layout:{fillColor:()=>soft,hLineColor:()=>line,vLineColor:()=>line,paddingLeft:()=>12,paddingRight:()=>12,paddingTop:()=>10,paddingBottom:()=>10}},{width:'4%',text:''},{width:'44%',table:{widths:['*','*'],body:[[{stack:[{text:'NUMER ZAPYTANIA',fontSize:8,bold:true,color:muted},{text:pdfText(r.request_number||'—'),bold:true,color:navy,margin:[0,5,0,0]}]},{stack:[{text:'OFERTA WAŻNA DO',fontSize:8,bold:true,color:muted},{text:validText,bold:true,color:navy,margin:[0,5,0,0]}]}],[{stack:[{text:'FORMA PŁATNOŚCI',fontSize:8,bold:true,color:muted},{text:paymentTerms||'—',margin:[0,5,0,0]}]},{stack:[{text:'TERMIN OGÓLNY',fontSize:8,bold:true,color:muted},{text:normalizeDeliveryTime(deliveryTime),margin:[0,5,0,0]}]}]]},layout:{fillColor:()=>soft,hLineColor:()=>line,vLineColor:()=>line,paddingLeft:()=>10,paddingRight:()=>10,paddingTop:()=>10,paddingBottom:()=>10}}],margin:[0,0,0,16]},
-      {table:{widths:[28,'*',38,76,76,84],body:[[{text:'POZ.',style:'pdfTh'},{text:'PRODUKT I KONFIGURACJA',style:'pdfTh'},{text:'ILOŚĆ',style:'pdfTh'},{text:'CENA NETTO/SZT.',style:'pdfTh'},{text:'CENA BRUTTO/SZT.',style:'pdfTh'},{text:'WARTOŚĆ BRUTTO',style:'pdfTh'}]]},layout:{fillColor:()=>navy,hLineColor:()=>navy,vLineColor:()=>navy,paddingLeft:()=>7,paddingRight:()=>7,paddingTop:()=>7,paddingBottom:()=>7},margin:[0,0,0,7]},
+      {columns:[
+        {stack:[{text:'idea-nova.pl',fontSize:21,bold:true,color:navy},{text:'Fronty aluminiowe · oferta handlowa',fontSize:9,color:muted,margin:[0,2,0,0]}]},
+        {stack:[{text:quoteNo,fontSize:14,bold:true,alignment:'right',color:navy},{text:`Data wyceny: ${new Date().toLocaleDateString('pl-PL')}`,alignment:'right',color:muted,margin:[0,3,0,0]}]}
+      ]},
+      {canvas:[{type:'line',x1:0,y1:9,x2:527,y2:9,lineWidth:1.5,lineColor:navy}],margin:[0,0,0,15]},
+      {columns:[
+        {width:'55%',table:{widths:['*'],body:[[{stack:[
+          {text:'DANE KLIENTA',fontSize:8,bold:true,color:muted,margin:[0,0,0,6]},
+          {text:pdfText(c.name||'—'),fontSize:11,bold:true,color:navy},
+          {text:pdfText(c.company_name||'')},{text:pdfText(c.email||'')},{text:pdfText(c.phone||'')},
+          {text:pdfText([c.address,c.zip,c.city].filter(Boolean).join(', '))}
+        ]}]]},layout:{fillColor:()=>soft,hLineColor:()=>line,vLineColor:()=>line,paddingLeft:()=>11,paddingRight:()=>11,paddingTop:()=>9,paddingBottom:()=>9}},
+        {width:'3%',text:''},
+        {width:'42%',table:{widths:['*'],body:[
+          [{stack:[{text:'NUMER ZAPYTANIA',fontSize:8,bold:true,color:muted},{text:pdfText(r.request_number||'—'),bold:true,color:navy,margin:[0,4,0,0]}]}],
+          [{columns:[{width:'50%',stack:[{text:'WAŻNA DO',fontSize:8,bold:true,color:muted},{text:validText,margin:[0,4,0,0]}]},{width:'50%',stack:[{text:'TERMIN OGÓLNY',fontSize:8,bold:true,color:muted},{text:normalizeDeliveryTime(deliveryTime),margin:[0,4,0,0]}]}]}],
+          [{stack:[{text:'FORMA PŁATNOŚCI',fontSize:8,bold:true,color:muted},{text:paymentTerms||'—',margin:[0,4,0,0]}]}]
+        ]},layout:{fillColor:()=>soft,hLineColor:()=>line,vLineColor:()=>line,paddingLeft:()=>10,paddingRight:()=>10,paddingTop:()=>8,paddingBottom:()=>8}}
+      ],margin:[0,0,0,14]},
+      {text:'POZYCJE OFERTY',fontSize:9,bold:true,color:navy,margin:[0,0,0,7]},
       ...itemBlocks,
-      {columns:[{width:'55%',stack:[{text:'WARUNKI OFERTY',fontSize:8,bold:true,color:muted,margin:[0,6,0,7]},{text:`Forma płatności: ${paymentTerms||'—'}`,margin:[0,2,0,0]},{text:'PKO Bank Polski · 62 1020 1185 0000 4702 0310 8537',margin:[0,2,0,0]},{text:`Oferta ważna do: ${validText}`,margin:[0,2,0,0]}]},{width:'45%',table:{widths:['*',105],body:[['Pozycje netto',money(t.itemsNet)],['Dostawa netto',money(t.delivery)],[`VAT ${t.vatRate}%`,money(t.vat)],[{text:'RAZEM BRUTTO',bold:true,fontSize:11,color:navy},{text:money(t.gross),bold:true,fontSize:13,color:navy}]]},layout:{fillColor:(row)=>row===3?soft:null,hLineColor:()=>line,vLineColor:()=>line,paddingLeft:()=>10,paddingRight:()=>10,paddingTop:()=>7,paddingBottom:()=>7}}],margin:[0,12,0,0]},
-      {text:'Dziękujemy za zapytanie. W przypadku zmian parametrów przygotujemy kolejną wersję oferty.',margin:[0,20,0,0],fontSize:8,color:muted}
-    ],styles:{pdfTh:{color:'#fff',bold:true,fontSize:7.5,alignment:'center'}}};
+      {columns:[
+        {width:'52%',stack:[
+          {text:'WARUNKI OFERTY',fontSize:8,bold:true,color:muted,margin:[0,4,0,6]},
+          {text:`Forma płatności: ${paymentTerms||'—'}`,margin:[0,2,0,0]},
+          {text:'PKO Bank Polski · 62 1020 1185 0000 4702 0310 8537',margin:[0,2,0,0]},
+          {text:`Oferta ważna do: ${validText}`,margin:[0,2,0,0]}
+        ]},
+        {width:'48%',table:{widths:['*',90],body:[
+          ['Pozycje netto',money(t.itemsNet)],
+          ['Dostawa netto',money(t.delivery)],
+          [`VAT ${t.vatRate}%`,money(t.vat)],
+          [{text:'RAZEM BRUTTO',bold:true,fontSize:10,color:navy},{text:money(t.gross),bold:true,fontSize:12,color:navy}]
+        ]},layout:{fillColor:(row)=>row===3?soft:null,hLineColor:()=>line,vLineColor:()=>line,paddingLeft:()=>9,paddingRight:()=>9,paddingTop:()=>6,paddingBottom:()=>6}}
+      ],margin:[0,8,0,0]},
+      {text:'Dziękujemy za zapytanie. W przypadku zmian parametrów przygotujemy kolejną wersję oferty.',margin:[0,18,0,0],fontSize:8,color:muted}
+    ],
+    styles:{
+      itemLabel:{fontSize:8,color:muted,bold:true},
+      itemValue:{fontSize:8.3,color:'#18212b'},
+      priceLabel:{fontSize:6.8,color:muted,bold:true,alignment:'center'},
+      priceValue:{fontSize:8.5,bold:true,alignment:'center'},
+      priceValueStrong:{fontSize:9,bold:true,color:navy,alignment:'center'}
+    }
+  };
 }
 function validateClientPdf(){
   if(!el('client-quote-number').value.trim()){showMsg('Podaj numer oferty.','error');return false}
@@ -350,16 +435,7 @@ function validateClientPdf(){
   if((window.quoteItems||[]).some(i=>itemPricingFromRow(i.id).purchase<=0)){showMsg('Uzupełnij cenę zakupu wszystkich pozycji.','error');return false}
   return true;
 }
-function previewClientPdf(){
-  if(!validateClientPdf())return;
-  try{
-    if(typeof pdfMake==='undefined')throw new Error('Generator PDF nie został załadowany. Odśwież stronę i spróbuj ponownie.');
-    pdfMake.createPdf(buildClientPdfDefinition()).open();
-  }catch(e){
-    console.error('Błąd podglądu PDF:',e);
-    showMsg(e.message||String(e),'error');
-  }
-}
+function previewClientPdf(){if(!validateClientPdf())return;pdfMake.createPdf(buildClientPdfDefinition()).open()}
 async function generateAndSaveClientPdf(btn){
   if(!validateClientPdf())return;
   if(btn){btn.disabled=true;btn.textContent='Generowanie...'}
