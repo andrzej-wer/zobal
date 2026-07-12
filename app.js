@@ -137,44 +137,29 @@ function renderQuote(){
   el('items-body').innerHTML=window.quoteItems.map(i=>{
     const purchase=Number(i.purchase_unit_net||0),margin=(i.margin_percent===null||i.margin_percent===undefined||Number(i.margin_percent)===0)?40:Number(i.margin_percent),sale=purchase*(1+margin/100),gross=sale*1.23,lineGross=gross*Number(i.quantity||0);
     const delivery=i.delivery_time||generalDelivery;
-    return `<tr data-item-row="${i.id}"><td><span class="position-chip">${i.position}</span></td><td class="item-description">${renderItemDetails(i)}</td><td class="compact-cell qty-cell">${i.quantity}</td><td class="purchase-cell"><input type="number" step="0.01" min="0" value="${purchase||''}" data-item="${i.id}" class="purchase-input"></td><td class="margin-cell"><div class="input-suffix"><input type="number" step="0.01" min="0" value="${margin}" data-item="${i.id}" class="margin-input"><span>%</span></div></td><td class="client-net-cell"><input type="number" step="0.01" min="0" value="${sale.toFixed(2)}" data-item="${i.id}" class="client-net-input"></td><td class="client-gross-value">${money(gross)}</td><td class="line-gross-value">${money(lineGross)}</td><td class="item-actions"><button class="btn btn-light btn-small" onclick="openItemEditor('${i.id}')">Edytuj</button><button class="btn btn-danger btn-small" onclick="deleteQuoteItem('${i.id}')">Usuń</button></td></tr>`;
+    return `<tr data-item-row="${i.id}"><td><span class="position-chip">${i.position}</span></td><td class="item-description">${renderItemDetails(i)}</td><td class="compact-cell qty-cell">${i.quantity}</td><td class="purchase-cell"><input type="number" step="0.01" min="0" value="${purchase||''}" data-item="${i.id}" class="purchase-input"></td><td class="margin-cell"><div class="input-suffix"><input type="number" step="0.01" min="0" value="${margin}" data-item="${i.id}" class="margin-input"><span>%</span></div></td><td class="client-net-value">${money(sale)}</td><td class="client-gross-value">${money(gross)}</td><td class="line-gross-value">${money(lineGross)}</td><td class="item-actions"><button class="btn btn-light btn-small" onclick="openItemEditor('${i.id}')">Edytuj</button><button class="btn btn-danger btn-small" onclick="deleteQuoteItem('${i.id}')">Usuń</button></td></tr>`;
   }).join('');
   el('zobal-list').innerHTML=window.zobals.map(z=>`<div class="doc-row internal"><div><strong>${escHtml(z.zobal_number)}</strong><br><span class="muted">${fmtDate(z.calculation_date||z.created_at)} · ${z.purchase_net?money(z.purchase_net)+' netto':'bez kwoty'}</span></div><div>${z.document_path?`<button class="btn btn-light" onclick="openPrivateFile('zobal-internal','${z.document_path}')">Otwórz PDF</button>`:''}</div></div>`).join('')||'<p class="muted">Brak kalkulacji Zobal.</p>';
   el('client-docs').innerHTML=window.clientQuotes.map(q=>`<div class="doc-row client"><div><strong>${escHtml(q.quote_number)}/V${q.version}</strong><br><span class="muted">${money(q.gross_total)} brutto · ${escHtml(q.status)}</span></div><div>${q.client_pdf_path?`<button class="btn btn-light" onclick="openPrivateFile('client-documents','${q.client_pdf_path}')">Otwórz PDF</button>`:''}</div></div>`).join('')||'<p class="muted">Brak dokumentów dla klienta.</p>';
   initClientQuoteFields();
   updateQuoteSummary();
-  document.querySelectorAll('.purchase-input,.margin-input').forEach(x=>x.addEventListener('input',()=>{recalculateItemRow(x.dataset.item,'from-margin');updateQuoteSummary()}));
-  document.querySelectorAll('.client-net-input').forEach(x=>x.addEventListener('input',()=>{recalculateItemRow(x.dataset.item,'from-net');updateQuoteSummary()}));
+  document.querySelectorAll('.purchase-input,.margin-input').forEach(x=>x.addEventListener('input',()=>{recalculateItemRow(x.dataset.item);updateQuoteSummary()}));
   document.querySelectorAll('.item-delivery-input').forEach(x=>x.addEventListener('input',()=>{x.dataset.custom='1'}));
   el('client-delivery-net')?.addEventListener('input',updateQuoteSummary);
   el('client-delivery-time')?.addEventListener('input',()=>{document.querySelectorAll('.item-delivery-input[data-custom="0"]').forEach(x=>x.value=el('client-delivery-time').value)});
 }
 function itemPricingFromRow(itemId){
   const row=document.querySelector(`tr[data-item-row="${itemId}"]`);
-  const purchase=Number(row?.querySelector('.purchase-input')?.value||0);
-  const margin=Number(row?.querySelector('.margin-input')?.value||0);
-  const netInput=Number(row?.querySelector('.client-net-input')?.value||0);
-  const net=netInput>0?netInput:purchase*(1+margin/100);
-  const gross=net*1.23;
-  const calculatedMargin=purchase>0?((net/purchase)-1)*100:margin;
-  return {purchase,margin:calculatedMargin,net,gross};
+  const purchase=Number(row?.querySelector('.purchase-input')?.value||0),margin=Number(row?.querySelector('.margin-input')?.value||40);
+  const net=purchase*(1+margin/100),gross=net*1.23;
+  return {purchase,margin,net,gross};
 }
-function recalculateItemRow(itemId,mode='from-margin'){
+function recalculateItemRow(itemId){
   const row=document.querySelector(`tr[data-item-row="${itemId}"]`),item=(window.quoteItems||[]).find(i=>i.id===itemId);if(!row||!item)return;
-  const purchase=Number(row.querySelector('.purchase-input')?.value||0);
-  const marginInput=row.querySelector('.margin-input');
-  const netInput=row.querySelector('.client-net-input');
-  let margin=Number(marginInput?.value||0),net=Number(netInput?.value||0);
-  if(mode==='from-net'){
-    margin=purchase>0?((net/purchase)-1)*100:0;
-    if(marginInput)marginInput.value=Number.isFinite(margin)?margin.toFixed(2):'0.00';
-  }else{
-    net=purchase*(1+margin/100);
-    if(netInput)netInput.value=Number.isFinite(net)?net.toFixed(2):'0.00';
-  }
-  const gross=net*1.23;
-  row.querySelector('.client-gross-value').textContent=money(gross);
-  row.querySelector('.line-gross-value').textContent=money(gross*Number(item.quantity||0));
+  const p=itemPricingFromRow(itemId);
+  row.querySelector('.client-net-value').textContent=money(p.net);
+  row.querySelector('.client-gross-value').textContent=money(p.gross);
+  row.querySelector('.line-gross-value').textContent=money(p.gross*Number(item.quantity||0));
 }
 async function saveQuote(){
   const updates=(window.quoteItems||[]).map(i=>{
@@ -323,7 +308,7 @@ function itemTechText(i){
 function buildClientPdfDefinition(){
   const r=window.quoteRequest||{},c=r.customers||{},t=currentQuoteTotals();
   const quoteNo=el('client-quote-number').value.trim(),validUntil=el('client-valid-until').value,deliveryTime=el('client-delivery-time').value.trim(),paymentTerms=el('client-payment-terms').value.trim();
-  const navy='#173b63',navyDark='#0f2b49',blue='#1769d2',soft='#f5f7fa',softBlue='#eef4fb',line='#dbe3ec',muted='#687789',text='#18212b',white='#ffffff';
+  const navy='#173b63',navyDark='#0f2b49',soft='#f7f9fc',softBlue='#eef4fb',line='#dbe3ec',muted='#687789',text='#18212b',white='#ffffff';
   const validText=validUntil?new Date(validUntil+'T12:00:00').toLocaleDateString('pl-PL'):'—';
 
   const itemBlocks=(window.quoteItems||[]).map(i=>{
@@ -331,28 +316,31 @@ function buildClientPdfDefinition(){
     const delivery=document.querySelector(`.item-delivery-input[data-item="${i.id}"]`)?.value.trim()||deliveryTime||'—';
     const heading=[i.item_name||`Front ${i.position}`,i.profile_code,i.finish,i.filling].filter(Boolean).join(' · ');
     const details=[];
-    details.push({columns:[{width:105,text:'Wymiary',style:'itemLabel'},{width:'*',text:`${i.height_mm||'—'} × ${i.width_mm||'—'} mm`,style:'itemValue'}],margin:[0,0,0,3]});
-    details.push({columns:[{width:105,text:'Termin realizacji',style:'itemLabel'},{width:'*',text:normalizeDeliveryTime(delivery),style:'itemValue'}],margin:[0,0,0,3]});
+    details.push({columns:[{width:100,text:'Wymiary',style:'itemLabel'},{width:'*',text:`${i.height_mm||'—'} × ${i.width_mm||'—'} mm`,style:'itemValue'}],margin:[0,0,0,3]});
+    details.push({columns:[{width:100,text:'Termin realizacji',style:'itemLabel'},{width:'*',text:normalizeDeliveryTime(delivery),style:'itemValue'}],margin:[0,0,0,3]});
     if(i.hinges_type&&i.hinges_type!=='Brak'){
-      details.push({columns:[{width:105,text:'Zawiasy / otwory',style:'itemLabel'},{width:'*',text:pdfText(itemTechText({...i,stiffener_type:'Brak',customer_notes:null}).replace('Zawiasy/otwory: ','')),style:'itemValue'}],margin:[0,0,0,3]});
+      details.push({columns:[{width:100,text:'Zawiasy / otwory',style:'itemLabel'},{width:'*',text:pdfText(itemTechText({...i,stiffener_type:'Brak',customer_notes:null}).replace('Zawiasy/otwory: ','')),style:'itemValue'}],margin:[0,0,0,3]});
     }
     if(i.stiffener_type&&i.stiffener_type!=='Brak'){
       let st=i.stiffener_type;
       if(i.stiffener_quantity)st+=`, ilość: ${i.stiffener_quantity}`;
       const sp=formatPositions(i.stiffener_positions);if(sp&&sp!=='—')st+=`, położenie: ${sp}`;
-      details.push({columns:[{width:105,text:'Szpros / usztywnienie',style:'itemLabel'},{width:'*',text:pdfText(st),style:'itemValue'}],margin:[0,0,0,3]});
+      details.push({columns:[{width:100,text:'Szpros / usztywnienie',style:'itemLabel'},{width:'*',text:pdfText(st),style:'itemValue'}],margin:[0,0,0,3]});
     }
-    if(i.customer_notes)details.push({columns:[{width:105,text:'Uwagi',style:'itemLabel'},{width:'*',text:pdfText(i.customer_notes),style:'itemValue'}],margin:[0,0,0,3]});
+    if(i.customer_notes)details.push({columns:[{width:100,text:'Uwagi',style:'itemLabel'},{width:'*',text:pdfText(i.customer_notes),style:'itemValue'}],margin:[0,0,0,3]});
+
+    const numberBox={
+      width:24,
+      table:{widths:[24],heights:[24],body:[[{text:String(i.position),alignment:'center',color:white,bold:true,fontSize:9,margin:[0,6,0,0],fillColor:navy}]]},
+      layout:{hLineWidth:()=>0,vLineWidth:()=>0,paddingLeft:()=>0,paddingRight:()=>0,paddingTop:()=>0,paddingBottom:()=>0}
+    };
 
     return {
       table:{
         widths:['*'],
         body:[[
           {stack:[
-            {columns:[
-              {width:22,table:{widths:[18],heights:[18],body:[[{text:String(i.position),style:'positionBadge'}]]},layout:{fillColor:()=>navy,hLineColor:()=>navy,vLineColor:()=>navy,paddingLeft:()=>0,paddingRight:()=>0,paddingTop:()=>4,paddingBottom:()=>2}},
-              {width:'*',text:pdfText(heading),style:'itemTitle',margin:[8,2,0,0]}
-            ],margin:[0,0,0,8]},
+            {columns:[numberBox,{width:'*',text:pdfText(heading),style:'itemTitle',margin:[9,4,0,0]}],margin:[0,0,0,8]},
             ...details,
             {table:{
               widths:['*','*','*'],
@@ -372,48 +360,43 @@ function buildClientPdfDefinition(){
               fillColor:(row)=>row===0?soft:white,
               hLineColor:()=>line,vLineColor:()=>line,
               paddingLeft:()=>8,paddingRight:()=>8,paddingTop:()=>5,paddingBottom:()=>5
-            },margin:[0,9,0,0]}
+            },margin:[0,8,0,0]}
           ],fillColor:white}
         ]]
       },
       layout:{
         hLineColor:()=>line,vLineColor:()=>line,
-        paddingLeft:()=>11,paddingRight:()=>11,paddingTop:()=>10,paddingBottom:()=>10
+        paddingLeft:()=>10,paddingRight:()=>10,paddingTop:()=>9,paddingBottom:()=>9
       },
-      margin:[0,0,0,9]
+      margin:[0,0,0,8]
     };
   });
+
+  const clientLines=[
+    pdfText(c.name||'—'),
+    pdfText(c.company_name||''),
+    pdfText(c.email||''),
+    pdfText(c.phone||''),
+    pdfText([c.address,c.zip,c.city].filter(Boolean).join(', '))
+  ].filter(Boolean);
 
   return {
     pageSize:'A4',
     pageOrientation:'portrait',
     pageMargins:[34,28,34,42],
-    defaultStyle:{font:'Roboto',fontSize:8.7,color:text},
+    defaultStyle:{font:'Roboto',fontSize:8.5,color:text},
     footer:(current,pageCount)=>({columns:[{text:`idea-nova.pl · ${quoteNo}`,alignment:'left'},{text:`strona ${current} z ${pageCount}`,alignment:'right'}],fontSize:7,color:muted,margin:[34,12,34,0]}),
     content:[
       {columns:[
         {stack:[{text:'idea-nova.pl',fontSize:21,bold:true,color:navyDark},{text:'Fronty aluminiowe · oferta handlowa',fontSize:9,color:muted,margin:[0,2,0,0]}]},
         {stack:[{text:quoteNo,fontSize:14,bold:true,alignment:'right',color:navyDark},{text:`Data wyceny: ${new Date().toLocaleDateString('pl-PL')}`,alignment:'right',color:muted,margin:[0,3,0,0]}]}
       ]},
-      {canvas:[{type:'line',x1:0,y1:9,x2:527,y2:9,lineWidth:1.2,lineColor:navy}],margin:[0,0,0,14]},
-      {columns:[
-        {width:'55%',table:{widths:['*'],body:[[{stack:[
-          {text:'DANE KLIENTA',fontSize:7.5,bold:true,color:muted,margin:[0,0,0,5]},
-          {text:pdfText(c.name||'—'),fontSize:10.5,bold:true,color:navyDark},
-          {text:pdfText(c.company_name||'')},{text:pdfText(c.email||'')},{text:pdfText(c.phone||'')},
-          {text:pdfText([c.address,c.zip,c.city].filter(Boolean).join(', '))}
-        ]}]]},layout:{fillColor:()=>soft,hLineColor:()=>line,vLineColor:()=>line,paddingLeft:()=>11,paddingRight:()=>11,paddingTop:()=>9,paddingBottom:()=>9}},
-        {width:'3%',text:''},
-        {width:'42%',table:{widths:['*'],body:[
-          [{stack:[{text:'NUMER ZAPYTANIA',fontSize:7.5,bold:true,color:muted},{text:pdfText(r.request_number||'—'),bold:true,color:navyDark,margin:[0,4,0,0]}]}],
-          [{columns:[{width:'50%',stack:[{text:'WAŻNA DO',fontSize:7.5,bold:true,color:muted},{text:validText,margin:[0,4,0,0]}]},{width:'50%',stack:[{text:'TERMIN OGÓLNY',fontSize:7.5,bold:true,color:muted},{text:normalizeDeliveryTime(deliveryTime),margin:[0,4,0,0]}]}]}],
-          [{stack:[{text:'FORMA PŁATNOŚCI',fontSize:7.5,bold:true,color:muted},{text:paymentTerms||'—',margin:[0,4,0,0]}]}]
-        ]},layout:{fillColor:()=>soft,hLineColor:()=>line,vLineColor:()=>line,paddingLeft:()=>10,paddingRight:()=>10,paddingTop:()=>8,paddingBottom:()=>8}}
-      ],margin:[0,0,0,14]},
-      {columns:[
-        {text:'POZYCJE OFERTY',fontSize:9,bold:true,color:navyDark},
-        {text:`Liczba pozycji: ${(window.quoteItems||[]).length}`,fontSize:8,color:muted,alignment:'right'}
-      ],margin:[0,0,0,7]},
+      {canvas:[{type:'line',x1:0,y1:9,x2:527,y2:9,lineWidth:1.2,lineColor:navy}],margin:[0,0,0,12]},
+      {table:{widths:['*'],body:[[{columns:[
+        {width:78,text:'DANE KLIENTA',fontSize:7.3,bold:true,color:muted,margin:[0,1,8,0]},
+        {width:'*',stack:clientLines.map((lineText,idx)=>({text:lineText,bold:idx===0,fontSize:idx===0?10:8.2,color:idx===0?navyDark:text,margin:[0,idx===0?0:1,0,0]}))}
+      ],fillColor:soft}]]},layout:{hLineColor:()=>line,vLineColor:()=>line,paddingLeft:()=>10,paddingRight:()=>10,paddingTop:()=>7,paddingBottom:()=>7},margin:[0,0,0,12]},
+      {text:'POZYCJE OFERTY',fontSize:9,bold:true,color:navyDark,margin:[0,0,0,7]},
       ...itemBlocks,
       {columns:[
         {width:'52%',stack:[
@@ -428,13 +411,12 @@ function buildClientPdfDefinition(){
           [`VAT ${t.vatRate}%`,money(t.vat)],
           [{text:'RAZEM BRUTTO',bold:true,fontSize:10,color:navyDark},{text:money(t.gross),bold:true,fontSize:12,color:navyDark}]
         ]},layout:{fillColor:(row)=>row===3?softBlue:null,hLineColor:()=>line,vLineColor:()=>line,paddingLeft:()=>9,paddingRight:()=>9,paddingTop:()=>6,paddingBottom:()=>6}}
-      ],margin:[0,8,0,0]},
+      ],margin:[0,8,0,0]}
     ],
     styles:{
-      positionBadge:{fontSize:8,bold:true,color:white,alignment:'center'},
       itemTitle:{fontSize:10.5,bold:true,color:navyDark},
       itemLabel:{fontSize:8,color:muted,bold:true},
-      itemValue:{fontSize:8.3,color:text},
+      itemValue:{fontSize:8.2,color:text},
       priceLabel:{fontSize:6.8,color:muted,bold:true,alignment:'center'},
       priceValue:{fontSize:8.8,bold:true,alignment:'center'},
       priceValueStrong:{fontSize:9.2,bold:true,color:navyDark,alignment:'center'}
