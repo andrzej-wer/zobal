@@ -40,3 +40,45 @@
 .quote-items-table td{vertical-align:top;padding-top:14px;padding-bottom:14px}.item-description{min-width:520px}.item-title-nowrap{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;margin-bottom:10px}.item-specs{gap:5px}.item-specs li{grid-template-columns:132px minmax(0,1fr)}.delivery-spec{align-items:center}.delivery-inline-wrap{display:flex;align-items:center;gap:7px}.item-delivery-inline{width:82px!important;min-width:82px!important;padding:7px 8px!important}.delivery-inline-wrap small{margin:0}.qty-cell{width:58px}.purchase-cell{width:96px;min-width:96px}.margin-cell{width:76px;min-width:76px}.purchase-input{width:82px;min-width:82px;padding:8px}.margin-input{width:48px;min-width:48px;padding:8px 5px}.input-suffix span{padding:0 6px}.client-net-value{width:108px;min-width:108px}.client-gross-value{width:112px;min-width:112px}.line-gross-value{width:118px;min-width:118px}.item-actions{width:78px;min-width:78px}.btn-small{padding:6px 8px}
 @media(max-width:1100px){.pdf-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.pdf-lower-grid{grid-template-columns:1fr}.item-description{min-width:460px}}
 @media(max-width:700px){.pdf-form-grid{grid-template-columns:1fr}.item-title-nowrap{white-space:normal}.delivery-inline-wrap{align-items:flex-start;flex-direction:column}}
+
+
+/* Layout v4 — pasek zapytania u góry, szersza cena zakupu */
+.quote-meta-bar{margin-bottom:18px}
+.quote-meta-strip{
+  display:grid;
+  grid-template-columns:minmax(260px,1.4fr) minmax(190px,.8fr) minmax(220px,.9fr) auto;
+  gap:16px;
+  align-items:end
+}
+.quote-meta-number{min-width:0}
+.quote-meta-number .quote-number{
+  padding:4px 0 7px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis
+}
+.quote-meta-field select{min-height:44px}
+.quote-meta-save{display:flex;justify-content:flex-end}
+.quote-meta-save .btn{min-height:44px;white-space:nowrap}
+.quote-customer-card{margin-bottom:18px}
+.quote-top-grid{display:none!important}
+
+/* Zakup netto: mieści wartości typu 1350,52 */
+.quote-items-table th:nth-child(4){width:122px}
+.purchase-cell{width:122px!important;min-width:122px!important}
+.purchase-input{
+  width:108px!important;
+  min-width:108px!important;
+  padding:8px 9px!important;
+  font-variant-numeric:tabular-nums
+}
+
+@media(max-width:900px){
+  .quote-meta-strip{grid-template-columns:1fr 1fr}
+  .quote-meta-number{grid-column:1/-1}
+  .quote-meta-save{justify-content:flex-start}
+}
+@media(max-width:620px){
+  .quote-meta-strip{grid-template-columns:1fr}
+  .quote-meta-number{grid-column:auto}
+}
